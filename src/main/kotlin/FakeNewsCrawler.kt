@@ -76,7 +76,6 @@ fun configure(propertiesFile: String) {
 fun downloadScreenshot() {
     LOGGER.info("Initializing DB")
     val storage = MongoDBStorage()
-    storage.init()
     val screenshotCrawler = ScreenshotCrawler(storage)
     screenshotCrawler.run()
     screenshotCrawler.close()
@@ -85,11 +84,11 @@ fun downloadScreenshot() {
 fun downloadWeb() {
     LOGGER.info("Initializing DB")
     val storage = MongoDBStorage()
-    storage.init()
     val webCrawler = WebHTMLCrawler(storage)
     webCrawler.run()
 }
 
+@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 fun addQueries(filename: String?, options: Options) {
     if (filename == null){
         println("File name is undefined")
@@ -102,7 +101,6 @@ fun addQueries(filename: String?, options: Options) {
     }
     LOGGER.info("Initializing DB")
     val storage = MongoDBStorage()
-    storage.init()
     file.readLines().map { it.trim() }.
         filter { it.isNotEmpty() }.
         forEach {
@@ -115,9 +113,7 @@ fun addQueries(filename: String?, options: Options) {
 fun download() {
     LOGGER.info("Initializing DB")
     val storage = MongoDBStorage()
-    storage.init()
-    var twitterCrawler = TwitterCrawler(storage)
-    twitterCrawler.init()
+    val twitterCrawler = TwitterCrawler(storage)
     twitterCrawler.run()
     storage.close()
 }

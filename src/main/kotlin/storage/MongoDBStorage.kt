@@ -7,7 +7,6 @@ import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
 import com.mongodb.client.gridfs.GridFSBucket
 import com.mongodb.client.gridfs.GridFSBuckets
-import com.mongodb.client.gridfs.model.GridFSDownloadOptions
 import com.mongodb.client.gridfs.model.GridFSUploadOptions
 import com.mongodb.client.model.*
 import org.bson.BsonObjectId
@@ -22,7 +21,6 @@ import org.bson.types.ObjectId
 import org.slf4j.LoggerFactory
 import twitter4j.Status
 import java.io.Closeable
-import javax.activation.MimeType
 
 var DEBUG_DB = false
 val FAKE_NEWS_DB by lazy { if (DEBUG_DB) "FakeNewsTest" else "FakeNews" }
@@ -150,9 +148,10 @@ fun toStorage(type: String, geodata: Array<Array<twitter4j.GeoLocation>>): Bound
 /**
  * This class provides support for storing the information into a MongoDB database
  */
+@Suppress("UNCHECKED_CAST")
 class MongoDBStorage: AutoCloseable, Closeable {
-    lateinit var client: MongoClient
-    lateinit var database: MongoDatabase
+    var client: MongoClient
+    var database: MongoDatabase
     lateinit var tweets: MongoCollection<Tweet<ObjectId>>
     lateinit var users: MongoCollection<User<ObjectId>>
     lateinit var places: MongoCollection<Place<ObjectId>>
@@ -170,7 +169,7 @@ class MongoDBStorage: AutoCloseable, Closeable {
     /**
      * Initialize the connection to the mongodb database
      */
-    fun init(){
+    init {
         val codecRegistry = createCodecRegistries(Tweet::class.java,
                                                   Place::class.java,
                                                   User::class.java,
@@ -308,6 +307,7 @@ class MongoDBStorage: AutoCloseable, Closeable {
         return this.userDownloads.find().first()
     }
 
+    @Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
     fun storeUserConnections(userId: Long, followees: MutableList<Long>, followers: MutableList<Long>, tweets: MutableList<Long>) {
         var userConnections = this.userConnections.find(Filters.eq(USER_ID, userId)).first()
         if (userConnections != null) {
@@ -338,8 +338,8 @@ class MongoDBStorage: AutoCloseable, Closeable {
     }
 
     fun screenshotsToTake(): Iterator<String> { //TESTEAR!
-        val currentScreenshots = this.screenshotMetaData.distinct("$FILENAME", java.lang.String::class.java).toSet()
-        val query = this.webContentMetaData.distinct("$FILENAME",
+        val currentScreenshots = this.screenshotMetaData.distinct(FILENAME, java.lang.String::class.java).toSet()
+        val query = this.webContentMetaData.distinct(FILENAME,
             Filters.and(
                 Filters.eq("$METADATA.$MIMETYPE", "text/html"),
                 Filters.not(Filters.`in`(FILENAME, currentScreenshots))),
@@ -356,25 +356,6 @@ class MongoDBStorage: AutoCloseable, Closeable {
             }
 
         }
-        /*val query = this.webContentMetaData.find(
-                Filters.and(
-                    Filters.eq("$METADATA.$MIMETYPE", "text/html"),
-                    Filters.not(Filters.`in`(FILENAME, currentScreenshots)))
-            ).cursor()
-        var next = query.tryNext()
-        return object: Iterator<String> {
-            override fun hasNext(): Boolean = next != null
-
-            override fun next(): String {
-                if (next==null) {
-                    throw NoSuchElementException("Closed iterator!")
-                }
-                val cNext = next
-                next = query.tryNext()
-                return cNext.getString(FILENAME)
-            }
-
-        }*/
     }
 
 
@@ -516,6 +497,7 @@ class MongoDBStorage: AutoCloseable, Closeable {
  * Creates codecs regitries as a work around of the inability of plain PojoCodecProvider
  * to Serialize/Unserialize generic classes
  */
+@Suppress("UNCHECKED_CAST")
 private fun createCodecRegistries(vararg classes: Class<*>): CodecRegistry {
     LOGGER.info("Initializing Codec Registry")
     val pojoCodecProvider = PojoCodecProvider.builder()

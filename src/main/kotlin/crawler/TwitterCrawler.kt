@@ -10,7 +10,6 @@ import java.lang.Exception
 import java.lang.Thread.sleep
 import java.util.*
 import kotlin.system.exitProcess
-import com.sun.org.glassfish.external.amx.AMXUtil.prop
 
 
 
@@ -54,10 +53,10 @@ class TwitterCrawler(val storage: MongoDBStorage) {
 
     lateinit var twitter: Twitter
 
-    fun init(){
+    init {
         LOGGER.info("Initializing twitter crawler")
         val directory = System.getProperty("twitter.oauthdir", "oauth")
-        var dir = File(directory)
+        val dir = File(directory)
         if (!dir.exists()){
             LOGGER.error("Directory $directory not found! Cannot load twitter oauth.")
             exitProcess(1)
@@ -66,7 +65,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
             LOGGER.error("$directory is not a directory! Cannot load twitter oauth.")
             exitProcess(1)
         }
-        dir.listFiles().filter { it.name.endsWith(".properties") }
+        dir.listFiles()!!.filter { it.name.endsWith(".properties") }
             .map {
                 LOGGER.debug("Loading: {}", it.name)
                 val properties = Properties()
@@ -95,7 +94,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
         LOGGER.info("Initializing Twitter account")
         val current = System.currentTimeMillis()
         if (next.time > current) {
-            var wait = next.time - current + 1000
+            val wait = next.time - current + 1000
             LOGGER.info("Next configuration is not ready... waiting {}", wait)
             sleep(wait)
             LOGGER.info("Continuing")
@@ -124,7 +123,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
                 when {
                     e.exceededRateLimitation() -> {
                         LOGGER.warn(e.rateLimitStatus.toString())
-                        var retryIn = e.rateLimitStatus.resetTimeInSeconds.toLong() * 1000
+                        val retryIn = e.rateLimitStatus.resetTimeInSeconds.toLong() * 1000
                         nextTwitterConnection(retryIn)
                     }
                     e.errorCode == UNAUTHORIZED -> {
@@ -175,7 +174,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
                 LOGGER.debug("Downloading...")
                 while (true){
                     LOGGER.debug("Cursor followees: {} UserId: {}", cursor, userDownload.userId)
-                    var cursorFollowees = twitter.getFriendsList(userDownload.userId, cursor)
+                    val cursorFollowees = twitter.getFriendsList(userDownload.userId, cursor)
                     followees.addAll(cursorFollowees)
                     if (!cursorFollowees.hasNext())
                         break
@@ -188,7 +187,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
                 LOGGER.debug("Downloading followers...")
                 while (true) {
                     LOGGER.debug("Cursor followers: {} UserId: {}", cursor, userDownload.userId)
-                    var cursorFollowers = twitter.getFollowersList(userDownload.userId, cursor)
+                    val cursorFollowers = twitter.getFollowersList(userDownload.userId, cursor)
                     followers.addAll(cursorFollowers)
                     if (!cursorFollowers.hasNext())
                         break
@@ -209,7 +208,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
     }
 
     private fun twitterCrawl(){
-        var currentQuery = this.storage.nextQueryDownload()
+        val currentQuery = this.storage.nextQueryDownload()
         if (currentQuery == null) {
             LOGGER.info("There are no more queries to crawl...")
             return
@@ -220,7 +219,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
         query.maxId = currentQuery.maxId
         while (true) {
             LOGGER.info("Processing batch...")
-            var results = twitter.search(query)
+            val results = twitter.search(query)
             results.tweets.forEach{ this.storeTweet(it) }
             queryInfo.tweetIds.addAll(results.tweets.map { it.id })
             //Store relation between query and tweet
@@ -239,7 +238,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
     private fun storeTweet(tweet: Status){
         LOGGER.debug("Processing tweet: {}", tweet.id)
         if (this.storage.storeTweet(tweet)) {
-            var urls = mutableSetOf<String>()
+            val urls = mutableSetOf<String>()
             urls.addAll(tweet.urlEntities.map { it.expandedURL })
             urls.addAll(tweet.mediaEntities.map { it.expandedURL })
             this.storage.storeUserDownload(tweet.user.id)
