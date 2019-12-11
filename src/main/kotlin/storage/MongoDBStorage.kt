@@ -5,11 +5,13 @@ import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
-import com.mongodb.client.model.Filters
-import com.mongodb.client.model.IndexOptions
-import com.mongodb.client.model.Indexes
-import com.mongodb.client.model.Sorts
+import com.mongodb.client.gridfs.GridFSBucket
+import com.mongodb.client.gridfs.GridFSBuckets
+import com.mongodb.client.gridfs.model.GridFSDownloadOptions
+import com.mongodb.client.gridfs.model.GridFSUploadOptions
+import com.mongodb.client.model.*
 import org.bson.BsonObjectId
+import org.bson.Document
 import org.bson.codecs.BsonObjectIdCodec
 import org.bson.codecs.configuration.CodecRegistries
 import org.bson.codecs.configuration.CodecRegistry
@@ -20,6 +22,7 @@ import org.bson.types.ObjectId
 import org.slf4j.LoggerFactory
 import twitter4j.Status
 import java.io.Closeable
+import javax.activation.MimeType
 
 var DEBUG_DB = false
 val FAKE_NEWS_DB by lazy { if (DEBUG_DB) "FakeNewsTest" else "FakeNews" }
@@ -33,6 +36,8 @@ const val USER_CONNECTIONS_COLLECTION = "userConnections"
 const val QUERY_DOWNLOAD_COLLECTION = "queryDownload"
 const val URL_DOWNLOAD_COLLECTION = "urlDownload"
 const val USER_DOWNLOAD_COLLECTION = "userDownload"
+const val WEB_CONTENT_COLLECTION = "webContent"
+const val SCREENSHOT_COLLECTION = "screenshot"
 
 const val TWEET_ID = "tweetId"
 const val USER_ID = "userId"
@@ -40,6 +45,12 @@ const val PLACE_ID = "placeId"
 const val QUERY_TEXT = "text"
 const val QUERY_MAX_ID = "maxId"
 const val URL = "url"
+const val LENGTH = "length"
+const val FILENAME = "filename"
+const val METADATA = "metadata"
+const val MIMETYPE = "mimetype"
+const val ERROR = "error"
+const val REDIRECT = "redirect_to"
 
 
 const val TWEET_ID_INDEX = "TWEET_ID_INDEX"
@@ -48,6 +59,8 @@ const val PLACE_ID_INDEX = "PLACE_ID_INDEX"
 const val QUERY_TEXT_INDEX = "QUERY_TEXT_INDEX"
 const val QUERY_MAX_ID_INDEX = "MAX_ID_INDEX"
 const val URL_INDEX = "URL_INDEX"
+const val LENGTH_INDEX = "LENGTH_INDEX"
+const val MIMETYPE_INDEX = "MIMETYPE_INDEX"
 
 
 private val MONGO_ID = "_id"
@@ -149,6 +162,11 @@ class MongoDBStorage: AutoCloseable, Closeable {
     lateinit var urlDownloads: MongoCollection<URLDownload<ObjectId>>
     lateinit var userDownloads: MongoCollection<UserDownload<ObjectId>>
 
+    lateinit var webContentFS: GridFSBucket
+    lateinit var webContentMetaData: MongoCollection<Document>
+    lateinit var screenshotFS: GridFSBucket
+    lateinit var screenshotMetaData: MongoCollection<Document>
+
     /**
      * Initialize the connection to the mongodb database
      */
@@ -168,9 +186,11 @@ class MongoDBStorage: AutoCloseable, Closeable {
         //Connects to the different collections
         twitterCollections(codecRegistry)
         downloadCollections(codecRegistry)
+        webContentCollections()
         LOGGER.info("Initialing indexes")
         twitterIndexes()
         downloadIndexes()
+        webContentIndexes()
     }
 
     fun storeUser(user: twitter4j.User): Boolean {
@@ -221,7 +241,7 @@ class MongoDBStorage: AutoCloseable, Closeable {
         LOGGER.debug("The Query {} not found, creating a new one", query)
         q = Query(null, query, mutableListOf())
         this.queries.insertOne(q)
-        return q
+        return this.queries.find(Filters.eq(QUERY_TEXT, query)).first()!!
     }
 
     fun findOrStoreQuery(query: Query<ObjectId>): Query<ObjectId> {
@@ -243,7 +263,7 @@ class MongoDBStorage: AutoCloseable, Closeable {
         LOGGER.debug("The Query Download {} not found, creating a new one", queryDownload)
         q = QueryDownload(null, queryDownload, -1L)
         this.queryDownloads.insertOne(q)
-        return q
+        return this.queryDownloads.find(Filters.eq(QUERY_TEXT, queryDownload)).first()!!
     }
 
     fun findOrStoreQueryDownload(queryDownload: QueryDownload<ObjectId>): QueryDownload<ObjectId> {
@@ -284,26 +304,6 @@ class MongoDBStorage: AutoCloseable, Closeable {
         this.urlDownloads.insertOne(urlDownload)
     }
 
-    private fun downloadIndexes() {
-        if (this.queryDownloads.listIndexes().find { it.getString("name") == QUERY_TEXT_INDEX } == null) {
-            LOGGER.info("Creating $QUERY_TEXT_INDEX for $QUERY_DOWNLOAD_COLLECTION")
-            this.queryDownloads.createIndex(Indexes.text(QUERY_TEXT), IndexOptions().name(QUERY_TEXT_INDEX))
-        }
-        if (this.queryDownloads.listIndexes().find { it.getString("name") == QUERY_MAX_ID_INDEX } == null) {
-            LOGGER.info("Creating $QUERY_MAX_ID_INDEX for $QUERY_DOWNLOAD_COLLECTION")
-            this.queryDownloads.createIndex(Indexes.descending(QUERY_MAX_ID), IndexOptions().name(QUERY_MAX_ID_INDEX))
-        }
-        if (this.urlDownloads.listIndexes().find { it.getString("name") == URL_INDEX } == null) {
-            LOGGER.info("Creating $URL_INDEX for $URL_DOWNLOAD_COLLECTION")
-            this.urlDownloads.createIndex(Indexes.hashed(URL), IndexOptions().name(URL_INDEX))
-        }
-        if (this.userDownloads.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
-            LOGGER.info("Creating $USER_ID_INDEX for $USER_DOWNLOAD_COLLECTION")
-            this.userDownloads.createIndex(Indexes.hashed(USER_ID), IndexOptions().name(USER_ID_INDEX))
-        }
-
-    }
-
     fun nextUserDownload(): UserDownload<ObjectId>? {
         return this.userDownloads.find().first()
     }
@@ -325,6 +325,84 @@ class MongoDBStorage: AutoCloseable, Closeable {
         if (userDownload.id == null)
             return false
         return this.userDownloads.deleteOne(Filters.eq(MONGO_ID, userDownload.id)).wasAcknowledged()
+    }
+
+    fun nextURLDownload(): URLDownload<ObjectId>? {
+        return this.urlDownloads.find().first()
+    }
+
+    fun removeURLDownload(urlDownload: URLDownload<ObjectId>): Boolean {
+        if (urlDownload.id == null)
+            return false
+        return this.urlDownloads.deleteOne(Filters.eq(MONGO_ID, urlDownload.id)).wasAcknowledged()
+    }
+
+    fun screenshotsToTake(): Iterator<String> { //TESTEAR!
+        val currentScreenshots = this.screenshotMetaData.distinct("$FILENAME", java.lang.String::class.java).toSet()
+        val query = this.webContentMetaData.distinct("$FILENAME",
+            Filters.and(
+                Filters.eq("$METADATA.$MIMETYPE", "text/html"),
+                Filters.not(Filters.`in`(FILENAME, currentScreenshots))),
+            java.lang.String::class.java)
+        val iter = query.iterator()
+        //Workaround as mongo driver does not support kotlin string
+        return object: Iterator<String> {
+            override fun hasNext(): Boolean {
+                return iter.hasNext()
+            }
+
+            override fun next(): String {
+                return iter.next() as String
+            }
+
+        }
+        /*val query = this.webContentMetaData.find(
+                Filters.and(
+                    Filters.eq("$METADATA.$MIMETYPE", "text/html"),
+                    Filters.not(Filters.`in`(FILENAME, currentScreenshots)))
+            ).cursor()
+        var next = query.tryNext()
+        return object: Iterator<String> {
+            override fun hasNext(): Boolean = next != null
+
+            override fun next(): String {
+                if (next==null) {
+                    throw NoSuchElementException("Closed iterator!")
+                }
+                val cNext = next
+                next = query.tryNext()
+                return cNext.getString(FILENAME)
+            }
+
+        }*/
+    }
+
+
+    fun storeScreenshot(url: String, bytes: ByteArray, type: String) {
+        val options = GridFSUploadOptions().metadata(Document(MIMETYPE, type))
+        val file = this.screenshotFS.openUploadStream(url, options)
+        file.write(bytes)
+        file.close()
+    }
+
+    fun updateWebContent(url: String, tweetId: Long): Boolean{
+        return this.webContentMetaData.updateOne(Filters.eq(FILENAME, url),
+            Updates.addToSet("$METADATA.$TWEET_ID", tweetId)).run {
+            this.wasAcknowledged() && this.modifiedCount == 1L
+        }
+    }
+
+    fun storeWebContent(url: String, tweetId: Long, redirect: String?, data: ByteArray, mimeType: String, mapValues: Map<String, String>) {
+        val metadata = Document(MIMETYPE, mimeType).
+            append(ERROR, Document(mapValues)).
+            append(TWEET_ID, listOf(tweetId))
+        if (redirect != null) {
+            metadata.append(REDIRECT, redirect)
+        }
+        val options = GridFSUploadOptions().metadata(metadata)
+        val file = this.webContentFS.openUploadStream(url, options)
+        file.write(data)
+        file.close()
     }
 
     override fun close() {
@@ -352,6 +430,38 @@ class MongoDBStorage: AutoCloseable, Closeable {
         if (this.userConnections.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
             LOGGER.info("Creating $USER_ID_INDEX for $USER_CONNECTIONS_COLLECTION")
             this.userConnections.createIndex(Indexes.hashed(USER_ID), IndexOptions().name(USER_ID_INDEX))
+        }
+    }
+
+
+    private fun downloadIndexes() {
+        if (this.queryDownloads.listIndexes().find { it.getString("name") == QUERY_TEXT_INDEX } == null) {
+            LOGGER.info("Creating $QUERY_TEXT_INDEX for $QUERY_DOWNLOAD_COLLECTION")
+            this.queryDownloads.createIndex(Indexes.text(QUERY_TEXT), IndexOptions().name(QUERY_TEXT_INDEX))
+        }
+        if (this.queryDownloads.listIndexes().find { it.getString("name") == QUERY_MAX_ID_INDEX } == null) {
+            LOGGER.info("Creating $QUERY_MAX_ID_INDEX for $QUERY_DOWNLOAD_COLLECTION")
+            this.queryDownloads.createIndex(Indexes.descending(QUERY_MAX_ID), IndexOptions().name(QUERY_MAX_ID_INDEX))
+        }
+        if (this.urlDownloads.listIndexes().find { it.getString("name") == URL_INDEX } == null) {
+            LOGGER.info("Creating $URL_INDEX for $URL_DOWNLOAD_COLLECTION")
+            this.urlDownloads.createIndex(Indexes.hashed(URL), IndexOptions().name(URL_INDEX))
+        }
+        if (this.userDownloads.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
+            LOGGER.info("Creating $USER_ID_INDEX for $USER_DOWNLOAD_COLLECTION")
+            this.userDownloads.createIndex(Indexes.hashed(USER_ID), IndexOptions().name(USER_ID_INDEX))
+        }
+
+    }
+
+    private fun webContentIndexes() {
+        if (this.webContentMetaData.listIndexes().find { it.getString("name") == LENGTH_INDEX } == null) {
+            LOGGER.info("Creating $LENGTH_INDEX for $WEB_CONTENT_COLLECTION")
+            this.webContentMetaData.createIndex(Indexes.ascending(LENGTH), IndexOptions().name(LENGTH_INDEX))
+        }
+        if (this.webContentMetaData.listIndexes().find { it.getString("name") == MIMETYPE_INDEX } == null) {
+            LOGGER.info("Creating $MIMETYPE_INDEX for $WEB_CONTENT_COLLECTION")
+            this.webContentMetaData.createIndex(Indexes.hashed("$METADATA:$MIMETYPE"), IndexOptions().name(MIMETYPE_INDEX))
         }
     }
 
@@ -392,6 +502,14 @@ class MongoDBStorage: AutoCloseable, Closeable {
             UserConnections::class.java
         ).withCodecRegistry(codecRegistry) as MongoCollection<UserConnections<ObjectId>>
     }
+
+    private fun webContentCollections() {
+        this.webContentFS = GridFSBuckets.create(this.database, WEB_CONTENT_COLLECTION)
+        this.webContentMetaData = this.database.getCollection("${WEB_CONTENT_COLLECTION}.files")
+        this.screenshotFS = GridFSBuckets.create(this.database, SCREENSHOT_COLLECTION)
+        this.screenshotMetaData = this.database.getCollection("${SCREENSHOT_COLLECTION}.files")
+    }
+
 }
 
 /**

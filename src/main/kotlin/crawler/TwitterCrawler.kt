@@ -42,7 +42,7 @@ private data class ConfigurationActivation(val time: Long, val configuration: Tw
     override fun compareTo(other: ConfigurationActivation): Int = when {
         this.time < other.time -> -1
         this.time > other.time -> 1
-        else -> 0
+        else -> this.configuration.oAuthAccessToken.compareTo(other.configuration.oAuthAccessToken)
     }
 
 }
@@ -136,8 +136,8 @@ class TwitterCrawler(val storage: MongoDBStorage) {
                         sleep((1000 * networkFails).toLong())
                     }
                     else -> {
-                        e.printStackTrace()
-                        exitProcess(1)
+                        LOGGER.error("Unextpected error in twitter ", e)
+                        nextTwitterConnection(null)
                     }
                 }
                 false //A Re-try is needed
