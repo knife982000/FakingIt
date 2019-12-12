@@ -1,5 +1,7 @@
 package edu.isistan.fakenews.crawler
 import edu.isistan.fakenews.storage.MongoDBStorage
+import edu.isistan.fakenews.storage.USER_FOLLOWEES_COLLECTION
+import edu.isistan.fakenews.storage.USER_FOLLOWERS_COLLECTION
 import org.slf4j.LoggerFactory
 import twitter4j.*
 import twitter4j.HttpResponseCode.UNAUTHORIZED
@@ -106,7 +108,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
 
     fun run() {
         this.retryTwitterDownloadWrapper { this.twitterCrawl() }
-        this.usersCrawl()
+        this.usersCrawlToDownload()
     }
 
     private fun retryTwitterDownloadWrapper(action: ()->Unit) {
@@ -147,61 +149,91 @@ class TwitterCrawler(val storage: MongoDBStorage) {
         }
     }
 
+    fun usersCrawl(ids: LongArray, tweets: Boolean=true, followers: Boolean=true, followees: Boolean=true) {
+        LOGGER.info("Downloading user list")
+        ids.filter {
+            this.storage.findUser(it) == null
+        }.chunked(99).map {
+            it.toLongArray()
+        }.forEach {
+            retryTwitterDownloadWrapper {
+                twitter.lookupUsers(*it).forEach {
+                    this.storage.storeUser(it)
+                }
+            }
+        }
+        ids.forEach { userCrawl(it, tweets, followers, followees) }
+    }
 
-    private fun usersCrawl() {
-        while (true) {
-            val userDownload = this.storage.nextUserDownload() ?: break
-            val tweets = mutableListOf<Status>()
-            val followees = mutableListOf<User>()
-            val followers = mutableListOf<User>()
-            LOGGER.info("Downloading User ${userDownload.userId}")
-            LOGGER.info("Downloading tweets for User ${userDownload.userId}")
-            val page = Paging(1)
+    fun userCrawl(userId: Long, tweets: Boolean=true, followers: Boolean=true, followees: Boolean=true) {
+        LOGGER.info("Downloading User {}", userId)
+        if (this.storage.findUser(userId) == null) {
+            LOGGER.debug("User {} is not present. Downloading information.", userId)
+            retryTwitterDownloadWrapper {
+                twitter.lookupUsers(userId).forEach {
+                    this.storage.storeUser(it)
+                }
+            }
+        }
+        if (tweets && !this.storage.userTweetsPresent(userId)) {
+            LOGGER.info("Downloading tweets for User {}", userId)
             retryTwitterDownloadWrapper {
                 LOGGER.debug("Downloading pages...")
+                @Suppress("NAME_SHADOWING") val tweets = mutableListOf<Status>()
+                val page = Paging(1)
                 while (true) {
-                    LOGGER.debug("Page: {} UserId: {}", page, userDownload.userId)
-                    val pageTweets = twitter.getUserTimeline(userDownload.userId, page)
+                    LOGGER.debug("Page: {} UserId: {}", page, userId)
+                    val pageTweets = twitter.getUserTimeline(userId, page)
                     tweets.addAll(pageTweets)
-                    if(pageTweets.isEmpty())
+                    if (pageTweets.isEmpty())
                         break
                     page.page += 1
                 }
+                tweets.forEach { this.storeTweet(it) }
+                this.storage.storeUserTweets(userId, tweets.map { it.id })
             }
-            LOGGER.info("Downloading followees for User ${userDownload.userId}")
-            var cursor = -1L
+        }
+        if (followees && !this.storage.userFolloweesFulledDownload(userId)) {
+            LOGGER.info("Downloading followees for User {}", userId)
+            var cursor = this.storage.findDownloadCursor(userId, USER_FOLLOWEES_COLLECTION)?: -1L
             retryTwitterDownloadWrapper {
                 LOGGER.debug("Downloading...")
-                while (true){
-                    LOGGER.debug("Cursor followees: {} UserId: {}", cursor, userDownload.userId)
-                    val cursorFollowees = twitter.getFriendsList(userDownload.userId, cursor)
-                    followees.addAll(cursorFollowees)
+                while (true) {
+                    LOGGER.debug("Cursor followees: {} UserId: {}", cursor, userId)
+                    val cursorFollowees = twitter.getFriendsList(userId, cursor)
+                    this.storage.storeUserFollowees(userId, cursorFollowees)
                     if (!cursorFollowees.hasNext())
                         break
                     cursor = cursorFollowees.nextCursor
+                    this.storage.storeDownloadCursor(userId, cursor, USER_FOLLOWEES_COLLECTION)
                 }
+                this.storage.removeDownloadCursor(userId, USER_FOLLOWEES_COLLECTION)
             }
-            LOGGER.info("Downloading followers for User ${userDownload.userId}")
-            cursor = -1L
+        }
+        if (followers && !this.storage.userFollowersFulledDownload(userId)) {
+            LOGGER.info("Downloading followers for User {}", userId)
+            var cursor = this.storage.findDownloadCursor(userId, USER_FOLLOWERS_COLLECTION)?: -1L
             retryTwitterDownloadWrapper {
                 LOGGER.debug("Downloading followers...")
                 while (true) {
-                    LOGGER.debug("Cursor followers: {} UserId: {}", cursor, userDownload.userId)
-                    val cursorFollowers = twitter.getFollowersList(userDownload.userId, cursor)
-                    followers.addAll(cursorFollowers)
+                    LOGGER.debug("Cursor followers: {} UserId: {}", cursor, userId)
+                    val cursorFollowers = twitter.getFollowersList(userId, cursor)
+                    this.storage.storeUserFollowers(userId, cursorFollowers)
                     if (!cursorFollowers.hasNext())
                         break
                     cursor = cursorFollowers.nextCursor
+                    this.storage.storeDownloadCursor(userId, cursor, USER_FOLLOWERS_COLLECTION)
                 }
+                this.storage.removeDownloadCursor(userId, USER_FOLLOWERS_COLLECTION)
             }
-            LOGGER.info("Storing information for User ${userDownload.userId}")
-            followees.forEach { this.storage.storeUser(it) }
-            followers.forEach { this.storage.storeUser(it) }
-            tweets.forEach { this.storage.storeTweet(it) }
-            this.storage.storeUserConnections(userDownload.userId,
-                followees.map { it.id }.toMutableList(),
-                followers.map { it.id }.toMutableList(),
-                tweets.map { it.id }.toMutableList())
+        }
+        LOGGER.info("User {} downloaded", userId)
+    }
+
+    private fun usersCrawlToDownload() {
+        while (true) {
+            val userDownload = this.storage.nextUserDownload() ?: break
+            userCrawl(userDownload.userId)
             this.storage.removeUserDownload(userDownload)
         }
         LOGGER.info("All users have been downloaded")

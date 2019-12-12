@@ -21,34 +21,42 @@ import org.bson.types.ObjectId
 import org.slf4j.LoggerFactory
 import twitter4j.Status
 import java.io.Closeable
+import kotlin.math.min
 
 var DEBUG_DB = false
 val FAKE_NEWS_DB by lazy { if (DEBUG_DB) "FakeNewsTest" else "FakeNews" }
 
-
+const val MAX_BUCKET = 100000
 const val TWEETS_COLLECTION = "tweets"
 const val USERS_COLLECTION = "users"
 const val PLACES_COLLECTION = "places"
 const val QUERIES_COLLECTION = "queries"
-const val USER_CONNECTIONS_COLLECTION = "userConnections"
+const val USER_TWEETS_COLLECTION = "userTweets"
+const val USER_FOLLOWEES_COLLECTION = "userFollowees"
+const val USER_FOLLOWERS_COLLECTION = "userFollowers"
 const val QUERY_DOWNLOAD_COLLECTION = "queryDownload"
 const val URL_DOWNLOAD_COLLECTION = "urlDownload"
 const val USER_DOWNLOAD_COLLECTION = "userDownload"
+const val CURSOR_DOWNLOAD_COLLECTION = "cursorDownload"
 const val WEB_CONTENT_COLLECTION = "webContent"
 const val SCREENSHOT_COLLECTION = "screenshot"
 
 const val TWEET_ID = "tweetId"
 const val USER_ID = "userId"
+const val BUCKET = "bucket"
 const val PLACE_ID = "placeId"
 const val QUERY_TEXT = "text"
 const val QUERY_MAX_ID = "maxId"
 const val URL = "url"
+const val CURSOR = "cursor"
+const val COLLECTION = "collection"
 const val LENGTH = "length"
 const val FILENAME = "filename"
 const val METADATA = "metadata"
 const val MIMETYPE = "mimetype"
 const val ERROR = "error"
 const val REDIRECT = "redirect_to"
+const val RELATION = "rel"
 
 
 const val TWEET_ID_INDEX = "TWEET_ID_INDEX"
@@ -156,10 +164,14 @@ class MongoDBStorage: AutoCloseable, Closeable {
     lateinit var users: MongoCollection<User<ObjectId>>
     lateinit var places: MongoCollection<Place<ObjectId>>
     lateinit var queries: MongoCollection<Query<ObjectId>>
-    lateinit var userConnections: MongoCollection<UserConnections<ObjectId>>
+    lateinit var userTweets: MongoCollection<UserTweets<ObjectId>>
+    lateinit var userFollowees: MongoCollection<UserRelations<ObjectId>>
+    lateinit var userFollowers: MongoCollection<UserRelations<ObjectId>>
+
     lateinit var queryDownloads: MongoCollection<QueryDownload<ObjectId>>
     lateinit var urlDownloads: MongoCollection<URLDownload<ObjectId>>
     lateinit var userDownloads: MongoCollection<UserDownload<ObjectId>>
+    lateinit var cursorDownloads: MongoCollection<CursorDownload<ObjectId>>
 
     lateinit var webContentFS: GridFSBucket
     lateinit var webContentMetaData: MongoCollection<Document>
@@ -174,10 +186,12 @@ class MongoDBStorage: AutoCloseable, Closeable {
                                                   Place::class.java,
                                                   User::class.java,
                                                   Query::class.java,
-                                                  UserConnections::class.java,
+                                                  UserTweets::class.java,
+                                                  UserRelations::class.java,
                                                   QueryDownload::class.java,
                                                   URLDownload::class.java,
-                                                  UserDownload::class.java)
+                                                  UserDownload::class.java,
+                                                  CursorDownload::class.java)
         LOGGER.info("Initialing the database")
         //TODO: Accept connection configuration through a file. Currently only supports a local MongoDb without user
         this.client = MongoClients.create()
@@ -205,6 +219,8 @@ class MongoDBStorage: AutoCloseable, Closeable {
         this.users.insertOne(sUser)
         return true
     }
+
+    fun findUser(userId: Long): User<ObjectId>? = this.users.find(Filters.eq(USER_ID, userId)).first()
 
     fun storePlace(place: twitter4j.Place): Boolean {
         LOGGER.debug("Inserting place {}", place.id)
@@ -290,8 +306,7 @@ class MongoDBStorage: AutoCloseable, Closeable {
 
 
     fun storeUserDownload(userId: Long): Boolean {
-        if (this.userDownloads.countDocuments(Filters.eq(USER_ID, userId)) != 0L ||
-                this.userConnections.countDocuments(Filters.eq(USER_ID, userId)) != 0L)
+        if (this.userDownloads.countDocuments(Filters.eq(USER_ID, userId)) != 0L)
             return false
         val userDownload = UserDownload<ObjectId>(null, userId)
         this.userDownloads.insertOne(userDownload)
@@ -307,18 +322,62 @@ class MongoDBStorage: AutoCloseable, Closeable {
         return this.userDownloads.find().first()
     }
 
-    @Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-    fun storeUserConnections(userId: Long, followees: MutableList<Long>, followers: MutableList<Long>, tweets: MutableList<Long>) {
-        var userConnections = this.userConnections.find(Filters.eq(USER_ID, userId)).first()
-        if (userConnections != null) {
-            userConnections.followees.addAll(followees.filter { it !in userConnections.followees })
-            userConnections.followers.addAll(followers.filter { it !in userConnections.followers })
-            userConnections.tweets.addAll(tweets.filter { it !in userConnections.tweets })
-            this.userConnections.replaceOne(Filters.eq(USER_ID, userId), userConnections)
-            return
+    fun storeUserTweets(userId: Long, tweets: List<Long>) {
+        this.userTweets.insertOne(UserTweets(null, userId, tweets.toMutableList()))
+    }
+
+    private fun storeRelations(userId: Long, rels: List<Long>,
+                               collection: MongoCollection<UserRelations<ObjectId>>) {
+        val current = collection.find(Filters.eq(USER_ID, userId)).
+            sort(Sorts.descending(BUCKET)).
+            first()
+        var remaining = rels
+        var bucket = 1
+        if (current != null) {
+            bucket = current.bucket + 1
+            val part = min(remaining.size, MAX_BUCKET - current.rel.size)
+            collection.updateOne(Filters.and(Filters.eq(USER_ID, userId), Filters.eq(BUCKET, current.bucket)),
+                Updates.addEachToSet(RELATION, remaining.subList(0, part)))
+            remaining = remaining.subList(part, remaining.size)
         }
-        userConnections = UserConnections(null, userId, followees, followers, tweets)
-        this.userConnections.insertOne(userConnections)
+        remaining.chunked(MAX_BUCKET).forEach {
+            collection.insertOne(UserRelations(null, userId, bucket++, it.toMutableList()))
+        }
+    }
+
+    fun storeUserFollowees(userId: Long, followees: List<twitter4j.User>?) {
+        if (followees == null)
+            return
+        followees.forEach {
+            this.storeUser(it)
+        }
+        this.storeRelations(userId, followees.map { it.id }, this.userFollowees)
+    }
+
+    fun storeUserFollowers(userId: Long, followers: List<twitter4j.User>?) {
+        if (followers == null)
+            return
+        followers.forEach {
+            this.storeUser(it)
+        }
+        this.storeRelations(userId, followers.map { it.id }, this.userFollowers)
+    }
+
+    fun userTweetsPresent(userId: Long): Boolean {
+        return this.userTweets.find(Filters.eq(USER_ID, userId)).first() != null
+    }
+
+    fun userFolloweesFulledDownload(userId: Long): Boolean {
+        return this.userFollowees.find(Filters.eq(USER_ID, userId)).first() != null &&
+                this.cursorDownloads.find(Filters.and(Filters.eq(USER_ID, userId),
+                    Filters.eq(COLLECTION, USER_FOLLOWEES_COLLECTION))).first() == null
+    }
+
+    fun userFollowersFulledDownload(userId: Long): Boolean {
+        return this.userFollowers.find(Filters.eq(USER_ID, userId)).first() != null &&
+                this.cursorDownloads.find(Filters.and(Filters.eq(USER_ID, userId),
+                    Filters.eq(COLLECTION, USER_FOLLOWERS_COLLECTION))).first() == null
+
     }
 
     fun removeUserDownload(userDownload: UserDownload<ObjectId>): Boolean {
@@ -335,6 +394,28 @@ class MongoDBStorage: AutoCloseable, Closeable {
         if (urlDownload.id == null)
             return false
         return this.urlDownloads.deleteOne(Filters.eq(MONGO_ID, urlDownload.id)).wasAcknowledged()
+    }
+
+    fun findDownloadCursor(userId: Long, collection: String): Long? {
+        return this.cursorDownloads.find(Filters.and(
+                Filters.eq(USER_ID, userId),
+                Filters.eq(COLLECTION, collection))).
+            first()?.cursor
+    }
+
+    fun storeDownloadCursor(userId: Long, cursor: Long, collection: String) {
+        val res = this.cursorDownloads.updateOne(Filters.and(
+            Filters.eq(USER_ID, userId),
+            Filters.eq(COLLECTION, collection)), Updates.set(CURSOR, cursor))
+        if (res.wasAcknowledged() && res.modifiedCount == 0L) {
+            this.cursorDownloads.insertOne(CursorDownload(null, userId, cursor, collection))
+        }
+    }
+
+    fun removeDownloadCursor(userId: Long, collection: String) {
+        this.cursorDownloads.deleteMany(Filters.and(
+            Filters.eq(USER_ID, userId),
+            Filters.eq(COLLECTION, collection)))
     }
 
     fun screenshotsToTake(): Iterator<String> { //TESTEAR!
@@ -354,7 +435,6 @@ class MongoDBStorage: AutoCloseable, Closeable {
             override fun next(): String {
                 return iter.next() as String
             }
-
         }
     }
 
@@ -408,9 +488,19 @@ class MongoDBStorage: AutoCloseable, Closeable {
             LOGGER.info("Creating $QUERY_TEXT_INDEX for $QUERIES_COLLECTION")
             this.queries.createIndex(Indexes.text(QUERY_TEXT), IndexOptions().name(QUERY_TEXT_INDEX))
         }
-        if (this.userConnections.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
-            LOGGER.info("Creating $USER_ID_INDEX for $USER_CONNECTIONS_COLLECTION")
-            this.userConnections.createIndex(Indexes.hashed(USER_ID), IndexOptions().name(USER_ID_INDEX))
+        if (this.userTweets.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
+            LOGGER.info("Creating $USER_ID_INDEX - $BUCKET for $USER_TWEETS_COLLECTION")//
+            this.userTweets.createIndex(Indexes.hashed(USER_ID), IndexOptions().name(USER_ID_INDEX))
+        }
+        if (this.userFollowees.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
+            LOGGER.info("Creating $USER_ID_INDEX - $BUCKET for $USER_FOLLOWEES_COLLECTION")//
+            this.userFollowees.createIndex(Indexes.compoundIndex(Indexes.ascending(USER_ID), Indexes.descending(BUCKET)),
+                IndexOptions().name(USER_ID_INDEX))
+        }
+        if (this.userFollowers.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
+            LOGGER.info("Creating $USER_ID_INDEX - $BUCKET for $USER_FOLLOWERS_COLLECTION")//
+            this.userFollowers.createIndex(Indexes.compoundIndex(Indexes.ascending(USER_ID), Indexes.descending(BUCKET)),
+                IndexOptions().name(USER_ID_INDEX))
         }
     }
 
@@ -431,6 +521,11 @@ class MongoDBStorage: AutoCloseable, Closeable {
         if (this.userDownloads.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
             LOGGER.info("Creating $USER_ID_INDEX for $USER_DOWNLOAD_COLLECTION")
             this.userDownloads.createIndex(Indexes.hashed(USER_ID), IndexOptions().name(USER_ID_INDEX))
+        }
+        if (this.cursorDownloads.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
+            LOGGER.info("Creating $USER_ID_INDEX - $COLLECTION for $CURSOR_DOWNLOAD_COLLECTION")
+            this.cursorDownloads.createIndex(Indexes.compoundIndex(Indexes.ascending(USER_ID), Indexes.text(COLLECTION)),
+                IndexOptions().name(USER_ID_INDEX))
         }
 
     }
@@ -459,6 +554,10 @@ class MongoDBStorage: AutoCloseable, Closeable {
             USER_DOWNLOAD_COLLECTION,
             UserDownload::class.java
         ).withCodecRegistry(codecRegistry) as MongoCollection<UserDownload<ObjectId>>
+        this.cursorDownloads = this.database.getCollection(
+            CURSOR_DOWNLOAD_COLLECTION,
+            CursorDownload::class.java
+        ).withCodecRegistry(codecRegistry) as MongoCollection<CursorDownload<ObjectId>>
     }
 
     private fun twitterCollections(codecRegistry: CodecRegistry) {
@@ -478,10 +577,18 @@ class MongoDBStorage: AutoCloseable, Closeable {
             QUERIES_COLLECTION,
             Query::class.java
         ).withCodecRegistry(codecRegistry) as MongoCollection<Query<ObjectId>>
-        this.userConnections =this.database.getCollection(
-            USER_CONNECTIONS_COLLECTION,
-            UserConnections::class.java
-        ).withCodecRegistry(codecRegistry) as MongoCollection<UserConnections<ObjectId>>
+        this.userTweets =this.database.getCollection(
+            USER_TWEETS_COLLECTION,
+            UserTweets::class.java
+        ).withCodecRegistry(codecRegistry) as MongoCollection<UserTweets<ObjectId>>
+        this.userFollowees =this.database.getCollection(
+            USER_FOLLOWEES_COLLECTION,
+            UserRelations::class.java
+        ).withCodecRegistry(codecRegistry) as MongoCollection<UserRelations<ObjectId>>
+        this.userFollowers =this.database.getCollection(
+            USER_FOLLOWERS_COLLECTION,
+            UserRelations::class.java
+        ).withCodecRegistry(codecRegistry) as MongoCollection<UserRelations<ObjectId>>
     }
 
     private fun webContentCollections() {

@@ -150,20 +150,21 @@ data class Query<T>(var id: T?=null,
                     var text: String="",
                     var tweetIds: MutableList<Long> = mutableListOf())
 
-/**
- * Represents the social connection of an user
- */
-data class UserConnections<T>(var id: T?,
-                              var userId: Long=0,
-                              var followees: MutableList<Long> = mutableListOf(),
-                              var followers: MutableList<Long> = mutableListOf(),
-                              var tweets: MutableList<Long> = mutableListOf())
+
+data class UserTweets<T>(var id: T?=null,
+                         var userId: Long=0,
+                         var tweets: MutableList<Long> = mutableListOf())
+
+data class UserRelations<T>(var id: T?=null,
+                            var userId: Long=0,
+                            var bucket: Int=0,
+                            var rel: MutableList<Long> = mutableListOf())
 /**
  * Represents a query that has not been downloaded yet
  */
 data class QueryDownload<T>(var id: T?=null,
-                           var text: String="",
-                           var maxId: Long = -1L)
+                            var text: String="",
+                            var maxId: Long = -1L)
 
 /**
  * Represents a URL that has not been downloaded yet
@@ -178,3 +179,8 @@ data class URLDownload<T>(var id: T?=null,
  */
 data class UserDownload<T>(var id: T?=null,
                            var userId: Long = 0L)
+
+data class CursorDownload<T>(var id: T?=null,
+                             var userId: Long = 0L,
+                             var cursor: Long = 0L,
+                             var collection: String = "")
