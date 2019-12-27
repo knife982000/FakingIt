@@ -32,6 +32,34 @@ import javax.net.ssl.X509TrustManager
 import kotlin.math.pow
 import kotlin.system.exitProcess
 
+
+private var mimeType: Map<String, String>? = null
+private var inverseMimeType: Map<String, String>? = null
+fun readMimeTypes(): Map<String, String> {
+    if (mimeType != null) {
+        return mimeType!!
+    }
+    val result = mutableMapOf<String, String>()
+    @Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+    val resourceFile = File(ClassLoader.getSystemClassLoader().getResource("mimeTypes.csv").file)
+    for (line in Files.readAllLines(resourceFile.toPath())) {
+        val sep = line.split(",")
+        if (sep.size != 2) {
+            continue
+        }
+        result[sep[0]] = sep[1]
+    }
+    mimeType = result
+    return result
+}
+
+fun readInverseMimeType(): Map<String, String>{
+    if (inverseMimeType == null) {
+        inverseMimeType = readMimeTypes().map { it.value to it.key }.toMap()
+    }
+    return inverseMimeType!!
+}
+
 var LOGGER = LoggerFactory.getLogger(WebHTMLCrawler::class.java)!!
 
 data class WebErrors(var url: String, var error: String)
@@ -69,10 +97,11 @@ data class WebDocument(var mimeType: String = "",
     }
 }
 
-class ScreenshotCrawler(private val storage: MongoDBStorage): Closeable {
-    lateinit var driver: WebDriver
+class ScreenshotCrawler(private val storage: MongoDBStorage, var format: String = "jpg"): Closeable {
+    var driver: WebDriver
 
     init {
+        initializeOpenCV()
         val bin = System.getProperty("screenshot.bin")
         val driverBin = System.getProperty("screenshot.driver")
         val extensions = System.getProperty("screenshot.extensions")?.split(",")
@@ -104,7 +133,10 @@ class ScreenshotCrawler(private val storage: MongoDBStorage): Closeable {
         this.storage.screenshotsToTake().forEach {
             LOGGER.info("Taking screenshot of {}", it)
             val screenshot = this.takeScreenshot(it)
-            this.storage.storeScreenshot(it, screenshot, "image/jpeg")
+            val bytes = ByteArrayOutputStream()
+            ImageIO.write(screenshot, this.format, bytes)
+            this.storage.storeScreenshot(it, bytes.toByteArray(), readInverseMimeType()[this.format] ?:
+                                                                    error("Invalid extension ${this.format}"))
         }
     }
 
@@ -113,29 +145,34 @@ class ScreenshotCrawler(private val storage: MongoDBStorage): Closeable {
         this.driver.close()
     }
 
-    private fun takeScreenshot(url: String): ByteArray {
+    fun takeScreenshot(url: String): BufferedImage {
         this.driver.get(url)
         this.driver.manage().window().fullscreen()
         val javascript = driver as JavascriptExecutor
         val screenshot = driver as TakesScreenshot
         val pageHeight = javascript.executeScript("return document.body.scrollHeight") as Long
-        var windowHeight = driver.manage().window().size.height / 2
+        val windowHeight = driver.manage().window().size.height / 2
         var page = 0
-        var pages = mutableListOf<BufferedImage>()
+        val pages = mutableListOf<BufferedImage>()
         //Nice Init
         while (page * windowHeight < pageHeight) {
-            javascript.executeScript("window.scrollTo(0, ${page * windowHeight})");
+            javascript.executeScript("window.scrollTo(0, ${page * windowHeight})")
             page++
         }
         page = 0
         //GET Screenshots
         while (page * windowHeight < pageHeight) {
-            javascript.executeScript("window.scrollTo(0, ${page * windowHeight})");
-            val img = screenshot.getScreenshotAs(OutputType.BYTES);
+            javascript.executeScript("window.scrollTo(0, ${page * windowHeight})")
+            val img = screenshot.getScreenshotAs(OutputType.BYTES)
             pages.add(ImageIO.read(ByteArrayInputStream(img)))
             page++
         }
         //CONCAT
+        return pages.reduce {
+                a, b -> verticalStich(a, b)
+            }
+
+        /*Old
         val height = pages.size * windowHeight + windowHeight//pages.map { it.height }.sum()
         val width = pages.map { it.width }.max()?: pages[0].width
         val concatImage = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
@@ -152,12 +189,12 @@ class ScreenshotCrawler(private val storage: MongoDBStorage): Closeable {
         val bytes = ByteArrayOutputStream()
         ImageIO.write(concatImage, "jpg", bytes)
 
-        return bytes.toByteArray()
+        return bytes.toByteArray()*/
     }
 }
 
 class WebHTMLCrawler(private val storage: MongoDBStorage)  {
-    private var insecure = System.getProperty("web.ssl_insecure", "true").toBoolean()
+    private var insecure = System.getProperty("web.ssl_insecure", "true")!!.toBoolean()
     private var max_retry = System.getProperty("web.max_retry").toIntOrNull() ?: 10
     private var limitExponentialBackoff = System.getProperty("web.max_wait").toLongOrNull() ?: 300_000
 
@@ -186,7 +223,7 @@ class WebHTMLCrawler(private val storage: MongoDBStorage)  {
 }
 
 
-internal inline fun ZipOutputStream.addEntry(name: String, data: ByteArray) {
+internal fun ZipOutputStream.addEntry(name: String, data: ByteArray) {
     this.putNextEntry(ZipEntry(name))
     this.write(data, 0, data.size)
     this.closeEntry()
@@ -203,18 +240,22 @@ internal class URLDownloader(private val insecure: Boolean = false, val max_retr
         LOGGER.info("Crawling {} with base URL {}", url, baseURL)
         var count = 0
         var retry = true
-        var newUrl = when (baseURL) {
+        val newUrl = when (baseURL) {
             null -> url
             else -> {
-                val uri = URI(baseURL)
-                uri.resolve(url).toString()
+                try{
+                    val uri = URI(baseURL)
+                    uri.resolve(url).toString()
+                } catch (e: Exception) {
+                    return WebDocument(errors = listOf(WebErrors(url, e.toString())))
+                }
             }
         }
         val result = WebDocument()
         result.url = newUrl
         while (retry) {
             try {
-                var response = Jsoup.connect(newUrl).
+                val response = Jsoup.connect(newUrl).
                     sslSocketFactory(this.sslSocketFactory).
                     ignoreContentType(true).
                     execute()
@@ -236,7 +277,7 @@ internal class URLDownloader(private val insecure: Boolean = false, val max_retr
                     result.errors = listOf(WebErrors(newUrl, e.message?: e.toString()))
                     retry = false
                 } else {
-                    var backOff =
+                    val backOff =
                         (2.0.pow(count.toDouble()).toLong() * 1000).takeIf { it < this.limitExponentialBackoff }
                             ?: (this.limitExponentialBackoff + 1)
                     Thread.sleep(backOff)
@@ -366,16 +407,4 @@ internal class URLDownloader(private val insecure: Boolean = false, val max_retr
 
     private fun isWebType(type: String) = type.startsWith(textContent) || xmlContentTypeRxp.matcher(type).matches()
 
-    private fun readMimeTypes(): Map<String, String> {
-        val result = mutableMapOf<String, String>()
-        val resourceFile = File(ClassLoader.getSystemClassLoader().getResource("mimeTypes.csv").file)
-        for (line in Files.readAllLines(resourceFile.toPath())) {
-            val sep = line.split(",")
-            if (sep.size != 2) {
-                continue
-            }
-            result[sep[0]] = sep[1]
-        }
-        return result
-    }
 }

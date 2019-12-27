@@ -455,7 +455,7 @@ class MongoDBStorage: AutoCloseable, Closeable {
 
     fun storeWebContent(url: String, tweetId: Long, redirect: String?, data: ByteArray, mimeType: String, mapValues: Map<String, String>) {
         val metadata = Document(MIMETYPE, mimeType).
-            append(ERROR, Document(mapValues)).
+            append(ERROR, mapValues.map { Document(URL, it.key).append(ERROR, it.value) }).
             append(TWEET_ID, listOf(tweetId))
         if (redirect != null) {
             metadata.append(REDIRECT, redirect)
