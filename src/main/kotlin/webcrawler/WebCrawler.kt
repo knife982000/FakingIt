@@ -97,11 +97,11 @@ data class WebDocument(var mimeType: String = "",
     }
 }
 
-class ScreenshotCrawler(private val storage: MongoDBStorage, var format: String = "jpg"): Closeable {
+abstract class ScreenshotCrawler(private val storage: MongoDBStorage, var format: String = "jpg"): Closeable {
     var driver: WebDriver
 
     init {
-        initializeOpenCV()
+        LOGGER.info("Initializing Driver")
         val bin = System.getProperty("screenshot.bin")
         val driverBin = System.getProperty("screenshot.driver")
         val extensions = System.getProperty("screenshot.extensions")?.split(",")
@@ -145,7 +145,71 @@ class ScreenshotCrawler(private val storage: MongoDBStorage, var format: String 
         this.driver.close()
     }
 
-    fun takeScreenshot(url: String): BufferedImage {
+    abstract fun takeScreenshot(url: String): BufferedImage
+}
+
+class SimpleScreenshotCrawler(storage: MongoDBStorage, format: String = "jpg"): ScreenshotCrawler(storage, format) {
+
+    override fun takeScreenshot(url: String): BufferedImage {
+        this.driver.get(url)
+        this.driver.manage().window().fullscreen()
+        val javascript = driver as JavascriptExecutor
+        val screenshot = driver as TakesScreenshot
+        val pageHeight = javascript.executeScript("return document.body.scrollHeight") as Long
+        val windowHeight = driver.manage().window().size.height / 2
+        var page = 0
+        val pages = mutableListOf<BufferedImage>()
+        //Nice Init
+        while (page * windowHeight < pageHeight) {
+            javascript.executeScript("window.scrollTo(0, ${page * windowHeight})")
+            page++
+        }
+        page = 0
+        //GET Screenshots
+        while (page * windowHeight < pageHeight) {
+            javascript.executeScript("window.scrollTo(0, ${page * windowHeight})")
+            val img = screenshot.getScreenshotAs(OutputType.BYTES)
+            pages.add(ImageIO.read(ByteArrayInputStream(img)))
+            page++
+        }
+        if (pages.isEmpty()) {
+            val img = screenshot.getScreenshotAs(OutputType.BYTES)
+            return ImageIO.read(ByteArrayInputStream(img))
+        }
+
+        //CONCAT
+        pages.dropLast(1).forEachIndexed { idx, img ->
+            val w = img.width
+            val h = img.height - 100
+            val bi2 = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+            val pixels = IntArray(w * h)
+            img.getRGB(0, 0, w, h, pixels, 0 , w)
+            bi2.setRGB(0, 0, w, h, pixels, 0 , w)
+            pages[idx] = bi2
+        }
+        val height = pages.size * (windowHeight-50) + pages.last().height-50//pages.map { it.height }.sum()
+        val width = pages.map { it.width }.max()?: pages[0].width
+        val concatImage = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        val g2d = concatImage.createGraphics()
+        var accHeight = height - windowHeight
+        println("Window $windowHeight")
+        pages.reversed().forEach {
+            accHeight -= windowHeight
+            println("acc $accHeight")
+            g2d.drawImage(it, 0, accHeight, null)
+        }
+        g2d.dispose()
+
+        return concatImage
+    }
+}
+
+class OpenCVScreenshotCrawler(storage: MongoDBStorage, format: String = "jpg"): ScreenshotCrawler(storage, format) {
+    init {
+        LOGGER.info("Initializing OpenCV")
+        initializeOpenCV()
+    }
+    override fun takeScreenshot(url: String): BufferedImage {
         this.driver.get(url)
         this.driver.manage().window().fullscreen()
         val javascript = driver as JavascriptExecutor
@@ -174,26 +238,7 @@ class ScreenshotCrawler(private val storage: MongoDBStorage, var format: String 
         //CONCAT
         return pages.reduce {
                 a, b -> verticalStich(a, b)
-            }
-
-        /*Old
-        val height = pages.size * windowHeight + windowHeight//pages.map { it.height }.sum()
-        val width = pages.map { it.width }.max()?: pages[0].width
-        val concatImage = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
-        val g2d = concatImage.createGraphics()
-        var accHeight = height - windowHeight
-        println("Window $windowHeight")
-        pages.reversed().forEach {
-            accHeight -= windowHeight
-            println("acc $accHeight")
-            g2d.drawImage(it, 0, accHeight, null)
         }
-        g2d.dispose()
-
-        val bytes = ByteArrayOutputStream()
-        ImageIO.write(concatImage, "jpg", bytes)
-
-        return bytes.toByteArray()*/
     }
 }
 

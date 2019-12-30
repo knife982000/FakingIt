@@ -3,7 +3,9 @@ package edu.isistan.fakenews
 import edu.isistan.fakenews.crawler.TwitterCrawler
 import edu.isistan.fakenews.storage.DEBUG_DB
 import edu.isistan.fakenews.storage.MongoDBStorage
+import edu.isistan.fakenews.webcrawler.OpenCVScreenshotCrawler
 import edu.isistan.fakenews.webcrawler.ScreenshotCrawler
+import edu.isistan.fakenews.webcrawler.SimpleScreenshotCrawler
 import edu.isistan.fakenews.webcrawler.WebHTMLCrawler
 import org.apache.commons.cli.*
 import org.slf4j.LoggerFactory
@@ -76,7 +78,7 @@ fun configure(propertiesFile: String) {
 fun downloadScreenshot() {
     LOGGER.info("Initializing DB")
     val storage = MongoDBStorage()
-    val screenshotCrawler = ScreenshotCrawler(storage)
+    val screenshotCrawler = SimpleScreenshotCrawler(storage)
     screenshotCrawler.run()
     screenshotCrawler.close()
 }
