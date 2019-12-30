@@ -134,9 +134,9 @@ class ScreenshotCrawler(private val storage: MongoDBStorage, var format: String 
             LOGGER.info("Taking screenshot of {}", it)
             val screenshot = this.takeScreenshot(it)
             val bytes = ByteArrayOutputStream()
-            ImageIO.write(screenshot, this.format, bytes)
-            this.storage.storeScreenshot(it, bytes.toByteArray(), readInverseMimeType()[this.format] ?:
-                                                                    error("Invalid extension ${this.format}"))
+            ImageIO.write(screenshot.ensureOpaque(), this.format, bytes)
+            this.storage.storeScreenshot(it, bytes.toByteArray(), readInverseMimeType()[".${this.format}"] ?:
+                                                                    error("Invalid extension .${this.format}"))
         }
     }
 
@@ -166,6 +166,10 @@ class ScreenshotCrawler(private val storage: MongoDBStorage, var format: String 
             val img = screenshot.getScreenshotAs(OutputType.BYTES)
             pages.add(ImageIO.read(ByteArrayInputStream(img)))
             page++
+        }
+        if (pages.isEmpty()) {
+            val img = screenshot.getScreenshotAs(OutputType.BYTES)
+            pages.add(ImageIO.read(ByteArrayInputStream(img)))
         }
         //CONCAT
         return pages.reduce {

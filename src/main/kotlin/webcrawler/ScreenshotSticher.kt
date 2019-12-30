@@ -37,6 +37,19 @@ fun BufferedImage.toMat(): Mat {
     return mat
 }
 
+
+fun BufferedImage.ensureOpaque(): BufferedImage {
+    if (this.transparency == BufferedImage.OPAQUE)
+        return this
+    val w = this.width
+    val h = this.height
+    val pixels = IntArray(w * h)
+    this.getRGB(0, 0, w, h, pixels, 0, w)
+    val bi2 = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+    bi2.setRGB(0, 0, w, h, pixels, 0, w)
+    return bi2
+}
+
 fun ByteArray.toMat(): Mat {
     val mat = Imgcodecs.imdecode(MatOfByte(*this), Imgcodecs.IMREAD_COLOR)
     Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2RGB)
@@ -77,11 +90,9 @@ fun verticalStich(imageA: Mat, imageB: Mat, lowerBarBound: Int=100, ratio: Doubl
     }.map { calcDestPoint(it.first, it.second, homography) }
     val maxWidth = java.lang.Double.max(mappedPoints.map { it.x }.max()!!, matB.size().width)
     val maxHeight = java.lang.Double.max(mappedPoints.map { it.y }.max()!!, matB.size().height)
-    println("$maxHeight $maxWidth")
     val result = Mat()
     Imgproc.warpPerspective(matA, result, homography,
         Size(Point(maxWidth, maxHeight)))
-    println("${matB.size().height.toInt()} ${matB.size().width.toInt()}")
 
     val bb= result.submat(0, matB.size().height.toInt(), 0, matB.size().width.toInt())
     matB.copyTo(bb)
