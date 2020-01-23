@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory
 import twitter4j.Status
 import java.io.Closeable
 import kotlin.math.min
+import java.util.stream.Collectors
 
 var DEBUG_DB = false
 val FAKE_NEWS_DB by lazy { if (DEBUG_DB) "FakeNewsTest" else "FakeNews" }
@@ -38,8 +39,14 @@ const val QUERY_DOWNLOAD_COLLECTION = "queryDownload"
 const val URL_DOWNLOAD_COLLECTION = "urlDownload"
 const val USER_DOWNLOAD_COLLECTION = "userDownload"
 const val CURSOR_DOWNLOAD_COLLECTION = "cursorDownload"
+
 const val WEB_CONTENT_COLLECTION = "webContent"
 const val SCREENSHOT_COLLECTION = "screenshot"
+const val TWEET_SCREENSHOT_COLLECTION = "tweetScreenshot" 
+
+const val TWEET_REPLIES_COLLECTION = "tweetReplies"
+const val TWEET_FAVORITES_COLLECTION = "tweetFavorites"
+const val TWEET_RETWEETERS_COLLECTION = "tweetRetweeters"
 
 const val TWEET_ID = "tweetId"
 const val USER_ID = "userId"
@@ -167,7 +174,10 @@ class MongoDBStorage: AutoCloseable, Closeable {
     lateinit var userTweets: MongoCollection<UserTweets<ObjectId>>
     lateinit var userFollowees: MongoCollection<UserRelations<ObjectId>>
     lateinit var userFollowers: MongoCollection<UserRelations<ObjectId>>
-
+	lateinit var tweetReplies : MongoCollection<TweetReplies<ObjectId>>
+	lateinit var tweetFavorites : MongoCollection<TweetReactions<ObjectId>>
+	lateinit var tweetRetweeters : MongoCollection<TweetReactions<ObjectId>>
+	
     lateinit var queryDownloads: MongoCollection<QueryDownload<ObjectId>>
     lateinit var urlDownloads: MongoCollection<URLDownload<ObjectId>>
     lateinit var userDownloads: MongoCollection<UserDownload<ObjectId>>
@@ -175,9 +185,13 @@ class MongoDBStorage: AutoCloseable, Closeable {
 
     lateinit var webContentFS: GridFSBucket
     lateinit var webContentMetaData: MongoCollection<Document>
+	
     lateinit var screenshotFS: GridFSBucket
     lateinit var screenshotMetaData: MongoCollection<Document>
 
+	lateinit var tweetScreenshotFS: GridFSBucket
+    lateinit var tweetScreenshotMetaData: MongoCollection<Document>
+	
     /**
      * Initialize the connection to the mongodb database
      */
@@ -188,6 +202,8 @@ class MongoDBStorage: AutoCloseable, Closeable {
                                                   Query::class.java,
                                                   UserTweets::class.java,
                                                   UserRelations::class.java,
+                                                  TweetReplies::class.java,
+                                                  TweetReactions::class.java,
                                                   QueryDownload::class.java,
                                                   URLDownload::class.java,
                                                   UserDownload::class.java,
@@ -221,7 +237,15 @@ class MongoDBStorage: AutoCloseable, Closeable {
     }
 
     fun findUser(userId: Long): User<ObjectId>? = this.users.find(Filters.eq(USER_ID, userId)).first()
+	
+	fun findTweet(tweetId: Long): Tweet<ObjectId>? = this.tweets.find(Filters.eq(TWEET_ID, tweetId)).first()
+	
+	fun findReplies(tweetId : Long): TweetReplies<ObjectId>? = this.tweetReplies.find(Filters.eq(TWEET_ID,tweetId)).first()
 
+	fun findScreenshot(tweetId : Long): Document? = this.screenshotMetaData.find(Filters.eq(FILENAME,tweetId.toString())).first()
+	
+	fun findTweetScreenshot(tweetId : Long): Document? = this.tweetScreenshotMetaData.find(Filters.eq(FILENAME,tweetId.toString())).first()
+	
     fun storePlace(place: twitter4j.Place): Boolean {
         LOGGER.debug("Inserting place {}", place.id)
         val sPlace = place.toStorage()
@@ -322,10 +346,29 @@ class MongoDBStorage: AutoCloseable, Closeable {
         return this.userDownloads.find().first()
     }
 
+	fun findUsersDownload() : List<Long>{
+		return this.userDownloads.find().toList().stream().map(UserDownload<ObjectId>::userId).collect(Collectors.toList())
+	}
+	
+	fun findUsers() : List<Long>{
+		return this.users.find().toList().stream().map(User<ObjectId>::userId).collect(Collectors.toList())
+	}
+	
     fun storeUserTweets(userId: Long, tweets: List<Long>) {
         this.userTweets.insertOne(UserTweets(null, userId, tweets.toMutableList()))
     }
 
+	fun storeTweetReplies(tweetId : Long, replies : List<Long>){
+		this.tweetReplies.insertOne(TweetReplies(null, tweetId,replies.toMutableList()))
+	}
+	
+	fun storeTweetReactions(tweetId : Long, reactions : List<Long>, what : String){
+		when(what){
+			"favorited" -> this.tweetFavorites.insertOne(TweetReactions(null,tweetId,reactions.toMutableList()))
+			"retweeted" -> this.tweetRetweeters.insertOne(TweetReactions(null,tweetId,reactions.toMutableList()))
+		}
+	}
+	
     private fun storeRelations(userId: Long, rels: List<Long>,
                                collection: MongoCollection<UserRelations<ObjectId>>) {
         val current = collection.find(Filters.eq(USER_ID, userId)).
@@ -386,6 +429,12 @@ class MongoDBStorage: AutoCloseable, Closeable {
         return this.userDownloads.deleteOne(Filters.eq(MONGO_ID, userDownload.id)).wasAcknowledged()
     }
 
+	  fun removeUserDownload(user: Long): Boolean {
+        if (this.userDownloads.find(Filters.eq(USER_ID,user)) == null)
+            return false
+        return this.userDownloads.deleteOne(Filters.eq(USER_ID, user)).wasAcknowledged()
+    }
+	
     fun nextURLDownload(): URLDownload<ObjectId>? {
         return this.urlDownloads.find().first()
     }
@@ -446,6 +495,13 @@ class MongoDBStorage: AutoCloseable, Closeable {
         file.close()
     }
 
+	fun storeTweetScreenshot(url: String, bytes: ByteArray, type: String) {
+        val options = GridFSUploadOptions().metadata(Document(MIMETYPE, type))
+        val file = this.tweetScreenshotFS.openUploadStream(url, options)
+        file.write(bytes)
+        file.close()
+    }
+	
     fun updateWebContent(url: String, tweetId: Long): Boolean{
         return this.webContentMetaData.updateOne(Filters.eq(FILENAME, url),
             Updates.addToSet("$METADATA.$TWEET_ID", tweetId)).run {
@@ -502,6 +558,19 @@ class MongoDBStorage: AutoCloseable, Closeable {
             this.userFollowers.createIndex(Indexes.compoundIndex(Indexes.ascending(USER_ID), Indexes.descending(BUCKET)),
                 IndexOptions().name(USER_ID_INDEX))
         }
+		if (this.tweetReplies.listIndexes().find { it.getString("name") == TWEET_ID_INDEX } == null) {
+            LOGGER.info("Creating $TWEET_ID - $BUCKET for $TWEET_REPLIES_COLLECTION")//
+            this.tweetReplies.createIndex(Indexes.hashed(TWEET_ID), IndexOptions().name(TWEET_ID_INDEX))
+        }
+		if (this.tweetFavorites.listIndexes().find { it.getString("name") == TWEET_ID_INDEX } == null) {
+            LOGGER.info("Creating $TWEET_ID - $BUCKET for $TWEET_FAVORITES_COLLECTION")//
+            this.tweetFavorites.createIndex(Indexes.hashed(TWEET_ID), IndexOptions().name(TWEET_ID_INDEX))
+        }
+		if (this.tweetRetweeters.listIndexes().find { it.getString("name") == TWEET_ID_INDEX } == null) {
+            LOGGER.info("Creating $TWEET_ID - $BUCKET for $TWEET_RETWEETERS_COLLECTION")//
+            this.tweetRetweeters.createIndex(Indexes.hashed(TWEET_ID), IndexOptions().name(TWEET_ID_INDEX))
+        }
+
     }
 
 
@@ -589,13 +658,33 @@ class MongoDBStorage: AutoCloseable, Closeable {
             USER_FOLLOWERS_COLLECTION,
             UserRelations::class.java
         ).withCodecRegistry(codecRegistry) as MongoCollection<UserRelations<ObjectId>>
+		
+		this.tweetReplies = this.database.getCollection(
+            TWEET_REPLIES_COLLECTION,
+            TweetReplies::class.java
+        ).withCodecRegistry(codecRegistry) as MongoCollection<TweetReplies<ObjectId>>
+		
+		this.tweetFavorites = this.database.getCollection(
+            TWEET_FAVORITES_COLLECTION,
+            TweetReactions::class.java
+        ).withCodecRegistry(codecRegistry) as MongoCollection<TweetReactions<ObjectId>>
+		
+		this.tweetRetweeters = this.database.getCollection(
+            TWEET_RETWEETERS_COLLECTION,
+            TweetReactions::class.java
+        ).withCodecRegistry(codecRegistry) as MongoCollection<TweetReactions<ObjectId>>
+		
     }
 
     private fun webContentCollections() {
         this.webContentFS = GridFSBuckets.create(this.database, WEB_CONTENT_COLLECTION)
         this.webContentMetaData = this.database.getCollection("${WEB_CONTENT_COLLECTION}.files")
-        this.screenshotFS = GridFSBuckets.create(this.database, SCREENSHOT_COLLECTION)
+
+		this.screenshotFS = GridFSBuckets.create(this.database, SCREENSHOT_COLLECTION)
         this.screenshotMetaData = this.database.getCollection("${SCREENSHOT_COLLECTION}.files")
+		
+        this.tweetScreenshotFS = GridFSBuckets.create(this.database, TWEET_SCREENSHOT_COLLECTION)
+        this.tweetScreenshotMetaData = this.database.getCollection("${TWEET_SCREENSHOT_COLLECTION}.files")
     }
 
 }

@@ -97,7 +97,7 @@ data class WebDocument(var mimeType: String = "",
     }
 }
 
-abstract class ScreenshotCrawler(private val storage: MongoDBStorage, var format: String = "jpg"): Closeable {
+abstract class ScreenshotCrawler(val storage: MongoDBStorage, var format: String = "png"): Closeable {
     var driver: WebDriver
 
     init {
@@ -140,15 +140,61 @@ abstract class ScreenshotCrawler(private val storage: MongoDBStorage, var format
         }
     }
 
+		fun run(tweetIds : List<Long>) {
+		init()
+        LOGGER.info("Taking tweet screenshots")
+		tweetIds.filter{this.storage.findScreenshot(it) == null}.forEach{
+			
+			val tweet = this.storage.findTweet(it)
+			val user = this.storage.findUser(tweet!!.userId!!)
+			val url = "https://twitter.com/${user!!.userId}/status/$it" 
+			val screenshot = this.takeScreenshot(url)
+            val bytes = ByteArrayOutputStream()
+            ImageIO.write(screenshot.ensureOpaque(), this.format, bytes)
+            
+			this.storage.storeScreenshot(it.toString(), bytes.toByteArray(), readInverseMimeType()[".${this.format}"] ?:
+                                                                    error("Invalid extension .${this.format}"))
+			
+			//this is to obfuscate the image using ocr
+//			val obfuscatedImage = obfuscateImage(processImage(screenshot,tweet),tweet,user.name)
+//			val bytesObs = ByteArrayOutputStream()
+//            ImageIO.write(obfuscatedImage.ensureOpaque(), this.format, bytesObs)
+            
+//			this.storage.storeTweetScreenshot(it.toString(), bytesObs.toByteArray(), readInverseMimeType()[".${this.format}"] ?:
+//                                                             error("Invalid extension .${this.format}"))
+			
+		}
+//		tweetIds.filter{this.storage.findTweetScreenshot(it) == null}.forEach{
+//			
+//			val tweet = this.storage.findTweet(it)!!
+//			val user = this.storage.findUser(tweet.userId!!)!!
+//			 
+//            val file = storage.screenshotFS.openDownloadStream(tweet.tweetId.toString())
+//			    val byte_array = file.readBytes()
+//			
+//         	val input_stream= ByteArrayInputStream(byte_array);
+//		    val final_buffered_image = ImageIO.read(input_stream);
+//			
+//			val obfuscatedImage = obfuscateImage(processImage(final_buffered_image,tweet),tweet,user.name)
+//			val bytesObs = ByteArrayOutputStream()
+//            ImageIO.write(obfuscatedImage.ensureOpaque(), this.format, bytesObs)
+//			
+//			this.storage.storeTweetScreenshot(it.toString(), bytesObs.toByteArray(), readInverseMimeType()[".${this.format}"] ?:
+//                                                             error("Invalid extension .${this.format}"))
+//			
+//		}
+	}
+	
     override fun close() {
         LOGGER.info("Closing driver")
-        this.driver.close()
+//        this.driver.close()
+		this.driver.quit() //apparently this is the one that closes everything
     }
 
     abstract fun takeScreenshot(url: String): BufferedImage
 }
 
-class SimpleScreenshotCrawler(storage: MongoDBStorage, format: String = "jpg"): ScreenshotCrawler(storage, format) {
+class SimpleScreenshotCrawler(storage: MongoDBStorage, format: String = "png"): ScreenshotCrawler(storage, format) {
 
     override fun takeScreenshot(url: String): BufferedImage {
         this.driver.get(url)
@@ -204,7 +250,7 @@ class SimpleScreenshotCrawler(storage: MongoDBStorage, format: String = "jpg"): 
     }
 }
 
-class OpenCVScreenshotCrawler(storage: MongoDBStorage, format: String = "jpg"): ScreenshotCrawler(storage, format) {
+class OpenCVScreenshotCrawler(storage: MongoDBStorage, format: String = "png"): ScreenshotCrawler(storage, format) {
     init {
         LOGGER.info("Initializing OpenCV")
         initializeOpenCV()

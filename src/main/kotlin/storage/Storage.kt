@@ -27,7 +27,7 @@ data class GeoLocation(var latitude: Double=0.0, var longitude: Double=0.0)
 /**
  * BaseEntity without extra information
  */
-data class BaseEntity(override var start: Int=0, override var end: Int) : IEntity
+data class BaseEntity(override var start: Int=0, override var end: Int=0) : IEntity
 
 /**
  * Entity representing a mention to an user in a tweet
@@ -75,6 +75,7 @@ data class MediaEntity(override var url: String="",
 data class Tweet<T>(var id: T?=null,
                     var tweetId: Long=0,
                     var userId: Long?=0, //Stored in another collection
+//					var userScreenname : String?=null, //necesito guardarlo para los replies :( y por las dudas que los usuarios no estén todavía almacenados
                     var text: String="",
                     var created: Date= Date(),
                     var source: String="", //is it important?
@@ -154,6 +155,14 @@ data class Query<T>(var id: T?=null,
 data class UserTweets<T>(var id: T?=null,
                          var userId: Long=0,
                          var tweets: MutableList<Long> = mutableListOf())
+
+data class TweetReplies<T>(var id: T?=null,
+                         var tweetId: Long=0,
+                         var replies: MutableList<Long> = mutableListOf())
+
+data class TweetReactions<T>(var id: T?=null,
+                         var tweetId: Long=0,
+                         var users: MutableList<Long> = mutableListOf())
 
 data class UserRelations<T>(var id: T?=null,
                             var userId: Long=0,
