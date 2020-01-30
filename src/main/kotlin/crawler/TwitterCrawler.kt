@@ -145,7 +145,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
 		this.usersCrawlToDownload()
 	}
 
-	fun run(tweetIds : ArrayList<Long>) {
+	fun run(tweetIds : MutableList<Long>) {
 		this.retryTwitterDownloadWrapper { this.twitterCrawl(tweetIds) }
 
 		this.tweetReplyDownload(tweetIds) //scrapper
@@ -317,7 +317,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
 	//call twitterCrawl al final para bajar los tweets de las respuestas.
 	//call tweetReplyDownload para armar la cadena de las cadenas
 	//después ver cómo reconstruir !!
-	private fun tweetReplyDownload(tweetIds : ArrayList<Long>){
+	private fun tweetReplyDownload(tweetIds : MutableList<Long>){
 
 		val newIds = ArrayList<Long>()
 		tweetIds.filter{this.storage.findReplies(it) == null}.forEach{
@@ -334,7 +334,7 @@ class TwitterCrawler(val storage: MongoDBStorage) {
 		tweetReplyDownload(newIds)
 	}
 
-	private fun twitterCrawl(tweetIds : ArrayList<Long>){
+	private fun twitterCrawl(tweetIds : MutableList<Long>){
 
 		tweetIds.filter{this.storage.findTweet(it) == null}.
 		chunked(99).map {

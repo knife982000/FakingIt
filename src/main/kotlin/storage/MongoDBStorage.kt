@@ -84,7 +84,7 @@ var LOGGER = LoggerFactory.getLogger(MongoDBStorage::class.java)!!
  * Converts a Status from Twitter4J into a Tweet object for storage
  */
 fun Status.toStorage(): Tweet<ObjectId> {
-    return Tweet(null, this.id, this.user?.id, this.text, this.createdAt, this.source, this.displayTextRangeStart,
+    return Tweet(null, this.id, this.user.id, this.text, this.createdAt, this.source, this.displayTextRangeStart,
         this.displayTextRangeEnd, this.isTruncated, this.inReplyToStatusId, this.inReplyToUserId, this.inReplyToScreenName,
         this.geoLocation.toStorage(), this.place?.id, this.favoriteCount, this.isRetweet, this.currentUserRetweetId,
         this.contributors?.toMutableList(),this.retweetCount, this.isPossiblySensitive, this.lang, this.quotedStatusId,
@@ -352,6 +352,10 @@ class MongoDBStorage: AutoCloseable, Closeable {
 	
 	fun findUsers() : List<Long>{
 		return this.users.find().toList().stream().map(User<ObjectId>::userId).collect(Collectors.toList())
+	}
+	
+	fun findTweets() : List<Long>{
+		return this.tweets.find().toList().stream().map(Tweet<ObjectId>::tweetId).collect(Collectors.toList())
 	}
 	
     fun storeUserTweets(userId: Long, tweets: List<Long>) {

@@ -33,11 +33,7 @@ fun showHelp(options: Options) {
 fun main(args: Array<String>) {
 	
 	//TODO:
-		//Add option de descargar relaciones de los usuarios que estén guardados y no hayan sido bajados (add option + call to method) 
-		//Add option de descargar usuarios que estén relacionados a los tweets --> de las listas de favoritos y retweets (add option + call to same method as before)
 		
-		//Add screenshots de todos los tweets y no solo los de la lista (change method to load from text file, change how to load parameter (avoid modifying other things) )
-	
 		//Add search tweets using scrapper --> para cuando tenemos solo el texto y queremos encontrar el tweet que matchea (medium to hard -- nothing done)
 		
 		//Add crawling de los tweets para arriba --> puede ser de una lista o de todos los que están ahí (easy to medium, has to search if it is retweet or quote,
@@ -45,10 +41,11 @@ fun main(args: Array<String>) {
 		
 		//Add search of the images in Google to see when have they been used and in which context -- check the pages for the keywords of the original search
 		//Add ocr over images (not screenshots)
+	
 		//Add query augmentation
 		//Add visualization
-	
-		//See las imágenes de los tweets se descargan?
+		
+		//TODO: Las relaciones de usuarios que no se bajen al bajar los tweets! --> CAMBIAR!!
 	
 	val args1 = arrayOf("-st","C:\\Users\\Anto\\Desktop\\twitter-hate\\ids_to_download.txt")
 	
@@ -57,7 +54,7 @@ fun main(args: Array<String>) {
 			groups.isRequired = true
 			groups.addOption(Option("d", "download", false, "start the twitter download process"))
 			groups.addOption(Option("w", "web", false, "start the Web content download process"))
-			groups.addOption(Option("s", "screenshot", false, "start the screenshot download process"))
+			groups.addOption(Option("s", "screenshot", false, "start the screenshot download process for all Tweets in the database or only those in the file"))
 			groups.addOption(Option("sc", "scrapper", false, "determines whether to use the Twitter api or the scrapper"))
 			groups.addOption(Option("ur", "user relations", false, "downloads the followee/follower relations of the already downloaded users"))
 			groups.addOption(Option("u", "users", false, "downloads the info of missing users (e.g. those who have favourited or retweeted)"))
@@ -84,7 +81,7 @@ fun main(args: Array<String>) {
 
 			val parser: CommandLineParser = DefaultParser()
 			try { // parse the command line arguments
-				val line = parser.parse(options, args1) //TODO
+				val line = parser.parse(options, args1) 
 						if (options.hasOption("ddb"))
 							DEBUG_DB = true
 							configure(line.getOptionValue("conf", "settings.properties")!!)
@@ -112,7 +109,7 @@ fun main(args: Array<String>) {
 				LOGGER.error("Parsing failed.  Reason: ${exp.message}")
 				showHelp(options)
 			}
-
+	
 }
 
 fun configure(propertiesFile: String) {
@@ -139,12 +136,22 @@ fun downloadTweetScreenshot(filename: String?) {
 	LOGGER.info("Initializing DB")
 	val storage = MongoDBStorage()
 	
+	val tweetIds = ArrayList<Long>()
+	if (filename == null){ //should download screenshots of all tweets in the database
+		LOGGER.info("Downloading screenshots of every Tweet in database")
+		tweetIds.addAll(storage.findTweets())
+	}
+	else{
+		LOGGER.info("Downloading screenshots of selected Tweets")
+		tweetIds.addAll(loadTweets(filename)) 	
+	}
+		
 	val screenshotCrawler = TwitterScreenshotCrawler(storage)
-	screenshotCrawler.run(loadTweets(filename))
+	screenshotCrawler.run(tweetIds)
 	screenshotCrawler.close() 
 	
 	val obfuscatedScreenshotCrawler = TwitterOfuscatedScreenshotCrawler(storage)
-	obfuscatedScreenshotCrawler.run(loadTweets(filename))
+	obfuscatedScreenshotCrawler.run(tweetIds)
 	obfuscatedScreenshotCrawler.close()
 }
 
@@ -185,11 +192,8 @@ fun download() {
 	storage.close()
 }
 
-private fun loadTweets(filename : String?) : ArrayList<Long>{
-	if (filename == null){
-		LOGGER.error("File name is undefined")
-		return ArrayList<Long>()
-	}
+private fun loadTweets(filename : String?) : MutableList<Long>{
+
 	val file = File(filename)
 			if (!file.exists() || !file.isFile) {
 				LOGGER.error("The specified root is not a file or does not exists {}",filename)
@@ -208,12 +212,22 @@ private fun loadTweets(filename : String?) : ArrayList<Long>{
 }
 
 fun downloadTweet(filename: String?) {
-	LOGGER.info("Initializing DB")
-	val storage = MongoDBStorage()
-	val tweetCrawler = TwitterCrawler(storage)
+	
+	if (filename == null){
+		LOGGER.error("File name is undefined")
+		return
+	}
+		
 	val tweetIds = loadTweets(filename)
-	tweetCrawler.run(tweetIds)
-	storage.close()
+	
+	if(tweetIds.size != 0){
+		LOGGER.info("Initializing DB")
+		val storage = MongoDBStorage()
+		val tweetCrawler = TwitterCrawler(storage)
+		tweetCrawler.run(tweetIds)
+		storage.close()
+	}
+		
 }
 
 fun downloadUsers() {

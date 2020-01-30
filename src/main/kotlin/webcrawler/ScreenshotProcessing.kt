@@ -28,6 +28,8 @@ import java.util.stream.Collectors
 	val GREEN = Scalar(0.0,255.0,0.0)
 	val BLACK = Scalar(0.0,0.0,0.0)
 
+class ScreenshotProcessing
+
 fun init(){
 
 	System.setProperty("java.library.path", "C:\\Users\\Anto\\Downloads\\opencv\\build\\java\\x64")
@@ -460,7 +462,7 @@ private fun searchWords(tesseract : Tesseract, image : Mat,quoted : Boolean,twee
 		return imgSource
 	}
 
-	private fun editDistance(word1 : String, word2 : String) : Int{
+	fun editDistance(word1 : String, word2 : String) : Int{
 		val len1 = word1.length
 		val len2 = word2.length
 
