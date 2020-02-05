@@ -1,6 +1,6 @@
 package edu.isistan.fakenews.webcrawler
 
-import edu.isistan.fakenews.webcrawler.ScreenshotCrawler
+import com.google.gson.Gson
 import edu.isistan.fakenews.storage.MongoDBStorage
 import java.awt.image.BufferedImage
 import org.openqa.selenium.JavascriptExecutor
@@ -21,42 +21,19 @@ class TwitterScreenshotCrawler(storage: MongoDBStorage, format: String = "png"):
 		WebDriverWait(this.driver, 10)
 		val javascript = driver as JavascriptExecutor
 		val screenshot = driver as TakesScreenshot
-		var pageHeight = javascript.executeScript("return document.getElementById(\"permalink-overlay\").scrollHeight") as Long
-		val windowHeight = driver.manage().window().size.height / 2
+		val scroll = driver.manage().window().size.height / 2
 
-		var page = 0
+		var lastTop = -1
 		val pages = mutableListOf<BufferedImage>()
-		var positions = mutableListOf<Long>()
-		//Nice Init
-		while (page * windowHeight < pageHeight) {
-			javascript.executeScript("document.getElementById(\"permalink-overlay\").scrollTo(0, ${page * windowHeight})")
-			Thread.sleep(2000)
-			page++
-			javascript.executeScript("""
-					var button = document.getElementsByClassName("ThreadedConversation-showMoreThreadsButton u-textUserColor")
-					if (button.length == 1) {
-						button[0].click()
-					}
-					""".trimIndent())
-					javascript.executeScript("""
-							var shows = document.getElementsByClassName("Tombstone-action js-display-this-media btn-link")
-							for (i=0; i<shows.length; i++) {
-								shows[i].click()
-							}
-							""".trimIndent())
-							pageHeight = javascript.executeScript("return document.getElementById(\"permalink-overlay\").scrollHeight") as Long
+		var positions = mutableListOf<Int>()
+		Thread.sleep(5000)//Wait to load... it is horrible but it kind of work!
+		while (lastTop != (javascript.executeScript("return window.scrollY") as Long).toInt()) {
+			val pos = (javascript.executeScript("return window.scrollY") as Long).toInt()
+			pages.add(ImageIO.read(ByteArrayInputStream(screenshot.getScreenshotAs(OutputType.BYTES))))
+			positions.add(pos)
+			lastTop = pos
+			javascript.executeScript("window.scrollTo(0, ${lastTop + scroll})")
 		}
-		page = 0
-				//GET Screenshots
-				while (page * windowHeight < pageHeight) {
-					javascript.executeScript("document.getElementById(\"permalink-overlay\").scrollTo(0, ${page * windowHeight})")
-					val img = screenshot.getScreenshotAs(OutputType.BYTES)
-					pages.add(ImageIO.read(ByteArrayInputStream(img)))
-					positions.add(javascript.executeScript("return document.getElementById(\"permalink-overlay\").scrollTop") as Long)
-					//println("Moved to ${page * windowHeight} recognized as ${positions.last()}")
-					page++
-				}
-		positions.add(pageHeight)
 
 		val pixelSize = pages[0].height.toDouble() / driver.manage().window().size.height
 		return stitchScreenshots(pages, positions.map { (it * pixelSize).toInt() })
@@ -65,64 +42,49 @@ class TwitterScreenshotCrawler(storage: MongoDBStorage, format: String = "png"):
 
 }
 
-class TwitterOfuscatedScreenshotCrawler(storage: MongoDBStorage, format: String = "jpg"): ScreenshotCrawler(storage, format) {
+class TwitterObfuscatedScreenshotCrawler(storage: MongoDBStorage, format: String = "jpg"): ScreenshotCrawler(storage, format) {
 
-	val ofuscatorJS = run {
-		val resourceFile = File(ClassLoader.getSystemClassLoader().getResource("twitterOfuscator.js").file)
+	val obfuscatorJS = run {
+		val resourceFile = File(ClassLoader.getSystemClassLoader().getResource("twitterObfuscator.js").file)
 				Files.readAllLines(resourceFile.toPath()).reduce {
 			a, b -> "$a\n$b"
 		}
 	}
+
+	val varsObfuscatorJS = run {
+		val resourceFile = File(ClassLoader.getSystemClassLoader().getResource("twitterObfscatorVariables.js").file)
+		Files.readAllLines(resourceFile.toPath()).reduce {
+				a, b -> "$a\n$b"
+		}
+	}
+
 	override fun takeScreenshot(url: String): BufferedImage {
+		val gson = Gson()
 		this.driver.get(url)
 		this.driver.manage().window().fullscreen()
 		WebDriverWait(this.driver, 10)
 		val javascript = driver as JavascriptExecutor
 		val screenshot = driver as TakesScreenshot
-		var pageHeight = javascript.executeScript("return document.getElementById(\"permalink-overlay\").scrollHeight") as Long
-		//var windowHeightr = javascript.executeScript("return window.innerHeight") as Long
-		val windowHeight = driver.manage().window().size.height / 2
+		val scroll = driver.manage().window().size.height / 2
 
-		var page = 0
+		var lastTop = -1
 		val pages = mutableListOf<BufferedImage>()
-		var positions = mutableListOf<Long>()
-		//Nice Init
-		while (page * windowHeight < pageHeight) {
-			javascript.executeScript("document.getElementById(\"permalink-overlay\").scrollTo(0, ${page * windowHeight})")
-			Thread.sleep(2000)
-			page++
-			javascript.executeScript("""
-					var button = document.getElementsByClassName("ThreadedConversation-showMoreThreadsButton u-textUserColor")
-					if (button.length == 1) {
-						button[0].click()
-					}
-					""".trimIndent())
-					javascript.executeScript("""
-							var shows = document.getElementsByClassName("Tombstone-action js-display-this-media btn-link")
-							for (i=0; i<shows.length; i++) {
-								shows[i].click()
-							}
-							""".trimIndent())
-							pageHeight = javascript.executeScript("return document.getElementById(\"permalink-overlay\").scrollHeight") as Long
+		val positions = mutableListOf<Int>()
+		Thread.sleep(5000)//Wait to load... it is horrible but it kind of work!
+		var data = javascript.executeScript(this.varsObfuscatorJS)
+		println(data)
+		while (lastTop != (javascript.executeScript("return window.scrollY") as Long).toInt()) {
+			data = javascript.executeScript("data = ${gson.toJson(data)}\n"+this.obfuscatorJS)
+			println(data)
+			val pos = (javascript.executeScript("return window.scrollY") as Long).toInt()
+			pages.add(ImageIO.read(ByteArrayInputStream(screenshot.getScreenshotAs(OutputType.BYTES))))
+			positions.add(pos)
+			lastTop = pos
+			javascript.executeScript("window.scrollTo(0, ${lastTop + scroll})")
 		}
-		javascript.executeScript(this.ofuscatorJS)
-		pageHeight = javascript.executeScript("return document.getElementById(\"permalink-overlay\").scrollHeight") as Long
-		page = 0
-		//GET Screenshots
-		while (page * windowHeight < pageHeight) {
-			javascript.executeScript("document.getElementById(\"permalink-overlay\").scrollTo(0, ${page * windowHeight})")
-			val img = screenshot.getScreenshotAs(OutputType.BYTES)
-			pages.add(ImageIO.read(ByteArrayInputStream(img)))
-			positions.add(javascript.executeScript("return document.getElementById(\"permalink-overlay\").scrollTop") as Long)
-			//println("Moved to ${page * windowHeight} recognized as ${positions.last()}")
-			page++
-		}
-		positions.add(pageHeight)
 
 		val pixelSize = pages[0].height.toDouble() / driver.manage().window().size.height
-		return stitchScreenshots(
-				pages,
-				positions.map { (it * pixelSize).toInt() })
+		return stitchScreenshots(pages, positions.map { (it * pixelSize).toInt() })
 	}
 
 	fun run(tweetIds : ArrayList<Long>){
@@ -134,7 +96,7 @@ class TwitterOfuscatedScreenshotCrawler(storage: MongoDBStorage, format: String 
 		tweetIds.filter{this.storage.findTweetScreenshot(it) == null}.forEach{
 
 			val tweet = this.storage.findTweet(it)
-					val user = this.storage.findUser(tweet!!.userId!!)
+					val user = this.storage.findUser(tweet!!.userId)
 					val url = "https://twitter.com/${user!!.userId}/status/$it" 
 					val screenshot = this.takeScreenshot(url)
 					val bytes = ByteArrayOutputStream()
@@ -153,11 +115,11 @@ class TwitterOfuscatedScreenshotCrawler(storage: MongoDBStorage, format: String 
 fun stitchScreenshots(imgs: List<BufferedImage>, pos: List<Int>): BufferedImage {
 	if (imgs.size == 1)
 		return imgs[0]
-				val height = pos.last()
-				val width = imgs[0].width
-				val concatImage = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
-				val g2d = concatImage.createGraphics()
-				imgs.zip(pos.dropLast(1)).forEach {
+	val height = pos.last() + imgs.last().height
+	val width = imgs.first().width
+	val concatImage = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+	val g2d = concatImage.createGraphics()
+	imgs.reversed().zip(pos.reversed()).forEach {
 		g2d.drawImage(it.first, 0, it.second, null)
 	}
 	return concatImage

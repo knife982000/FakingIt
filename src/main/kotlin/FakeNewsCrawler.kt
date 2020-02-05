@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.*
 import kotlin.system.exitProcess
-import edu.isistan.fakenews.webcrawler.TwitterOfuscatedScreenshotCrawler
+import edu.isistan.fakenews.webcrawler.TwitterObfuscatedScreenshotCrawler
 import org.bson.types.ObjectId
 import java.util.stream.Collectors
 
@@ -36,7 +36,7 @@ fun main(args: Array<String>) {
 		
 		//Add search tweets using scrapper --> para cuando tenemos solo el texto y queremos encontrar el tweet que matchea (medium to hard -- nothing done)
 		
-		//Add crawling de los tweets para arriba --> puede ser de una lista o de todos los que están ahí (easy to medium, has to search if it is retweet or quote,
+		//Add crawling de los tweets para arriba --> puede ser de una lista o de todos los que estï¿½n ahï¿½ (easy to medium, has to search if it is retweet or quote,
 			//if so, if it hasn't been download, call download tweets -- in replies maybe it is going to get heavy and repeated, call again this method until empty -- might be tedious)
 		
 		//Add search of the images in Google to see when have they been used and in which context -- check the pages for the keywords of the original search
@@ -150,7 +150,7 @@ fun downloadTweetScreenshot(filename: String?) {
 	screenshotCrawler.run(tweetIds)
 	screenshotCrawler.close() 
 	
-	val obfuscatedScreenshotCrawler = TwitterOfuscatedScreenshotCrawler(storage)
+	val obfuscatedScreenshotCrawler = TwitterObfuscatedScreenshotCrawler(storage)
 	obfuscatedScreenshotCrawler.run(tweetIds)
 	obfuscatedScreenshotCrawler.close()
 }
@@ -194,7 +194,7 @@ fun download() {
 
 private fun loadTweets(filename : String?) : MutableList<Long>{
 
-	val file = File(filename)
+	val file = File(filename!!)
 			if (!file.exists() || !file.isFile) {
 				LOGGER.error("The specified root is not a file or does not exists {}",filename)
 				return ArrayList<Long>()
