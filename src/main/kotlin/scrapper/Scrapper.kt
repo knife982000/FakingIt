@@ -99,6 +99,7 @@ fun getReplies(screenname : String, tweetId : String, driver: WebDriver? = null)
 		LOGGER.info("Closing Selenium Driver")
 		localDriver.quit()
 	}
+	replies.removeAll { it == tweetId.toLong() }
 	return replies;
 }
 
