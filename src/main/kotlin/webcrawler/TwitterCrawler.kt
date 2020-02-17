@@ -19,8 +19,8 @@ class TwitterScreenshotCrawler(storage: MongoDBStorage, format: String = "png"):
 
 	override fun takeScreenshot(url: String): BufferedImage {
 		this.driver.get(url)
-		this.driver.manage().window().size = Dimension(System.getProperty("screenshot.height").toIntOrNull()?: 800,
-			System.getProperty("screenshot.width").toIntOrNull()?: 600)
+		this.driver.manage().window().size = Dimension(System.getProperty("screenshot.height")?.toIntOrNull()?: 800,
+			System.getProperty("screenshot.width")?.toIntOrNull()?: 600)
 		WebDriverWait(this.driver, 10)
 		val javascript = driver as JavascriptExecutor
 		val screenshot = driver as TakesScreenshot
@@ -71,8 +71,8 @@ class TwitterObfuscatedScreenshotCrawler(storage: MongoDBStorage, format: String
 		val gson = Gson()
 		this.driver.get(url)
 		//this.driver.manage().window().fullscreen()
-		this.driver.manage().window().size = Dimension(System.getProperty("screenshot.height").toIntOrNull()?: 800,
-			System.getProperty("screenshot.width").toIntOrNull()?: 600)
+		this.driver.manage().window().size = Dimension(System.getProperty("screenshot.height")?.toIntOrNull()?: 800,
+			System.getProperty("screenshot.width")?.toIntOrNull()?: 600)
 		WebDriverWait(this.driver, 10)
 		val javascript = driver as JavascriptExecutor
 		val screenshot = driver as TakesScreenshot
@@ -132,11 +132,13 @@ fun stitchScreenshots(imgs: List<BufferedImage>, pos: List<Int>): BufferedImage 
 		return imgs[0]
 	val height = pos.last() + imgs.last().height
 	val width = imgs.first().width
-	val concatImage = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+	var concatImage = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
 	val g2d = concatImage.createGraphics()
 	imgs.reversed().zip(pos.reversed()).forEach {
 		g2d.drawImage(it.first, 0, it.second, null)
 	}
+	//CHOP SEARCH VAR
+	concatImage = concatImage.getSubimage(0, 107, concatImage.width, concatImage.height - 107)
 	return concatImage
 }
 
