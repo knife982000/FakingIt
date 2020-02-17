@@ -119,6 +119,7 @@ private fun scrollConversation(screenname: String, tweetId: String, driver: WebD
 			    document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu")[0].click()
 			}
 		""".trimIndent())
+		Thread.sleep(1000)//Wait to load... it is horrible but it kind of work!
 		lastTop = (javascript.executeScript("return window.scrollY") as Long).toInt()
 		javascript.executeScript("window.scrollTo(0, ${lastTop + scroll})")
 	}

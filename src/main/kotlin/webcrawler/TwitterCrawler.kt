@@ -2,6 +2,7 @@ package edu.isistan.fakenews.webcrawler
 
 import com.google.gson.Gson
 import edu.isistan.fakenews.storage.MongoDBStorage
+import org.openqa.selenium.Dimension
 import java.awt.image.BufferedImage
 import org.openqa.selenium.JavascriptExecutor
 import org.openqa.selenium.support.ui.WebDriverWait
@@ -11,23 +12,31 @@ import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.ObjectInput
 import java.nio.file.Files
 
 class TwitterScreenshotCrawler(storage: MongoDBStorage, format: String = "png"): ScreenshotCrawler(storage, format) {
 
 	override fun takeScreenshot(url: String): BufferedImage {
 		this.driver.get(url)
-		this.driver.manage().window().fullscreen()
+		this.driver.manage().window().size = Dimension(System.getProperty("screenshot.height").toIntOrNull()?: 800,
+			System.getProperty("screenshot.width").toIntOrNull()?: 600)
 		WebDriverWait(this.driver, 10)
 		val javascript = driver as JavascriptExecutor
 		val screenshot = driver as TakesScreenshot
-		val scroll = driver.manage().window().size.height / 2
+		val scroll = windowInnerHeight(javascript) / 2
 
 		var lastTop = -1
 		val pages = mutableListOf<BufferedImage>()
 		var positions = mutableListOf<Int>()
 		Thread.sleep(5000)//Wait to load... it is horrible but it kind of work!
 		while (lastTop != (javascript.executeScript("return window.scrollY") as Long).toInt()) {
+			javascript.executeScript("""
+				if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu").length == 1) {
+			    	document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu")[0].click()
+				}
+			""".trimIndent())
+			Thread.sleep(1000)//Wait to load... it is horrible but it kind of work!
 			val pos = (javascript.executeScript("return window.scrollY") as Long).toInt()
 			pages.add(ImageIO.read(ByteArrayInputStream(screenshot.getScreenshotAs(OutputType.BYTES))))
 			positions.add(pos)
@@ -35,7 +44,7 @@ class TwitterScreenshotCrawler(storage: MongoDBStorage, format: String = "png"):
 			javascript.executeScript("window.scrollTo(0, ${lastTop + scroll})")
 		}
 
-		val pixelSize = pages[0].height.toDouble() / driver.manage().window().size.height
+		val pixelSize = pages[0].height.toDouble() / windowInnerHeight(javascript)
 		return stitchScreenshots(pages, positions.map { (it * pixelSize).toInt() })
 	}
 
@@ -61,21 +70,27 @@ class TwitterObfuscatedScreenshotCrawler(storage: MongoDBStorage, format: String
 	override fun takeScreenshot(url: String): BufferedImage {
 		val gson = Gson()
 		this.driver.get(url)
-		this.driver.manage().window().fullscreen()
+		//this.driver.manage().window().fullscreen()
+		this.driver.manage().window().size = Dimension(System.getProperty("screenshot.height").toIntOrNull()?: 800,
+			System.getProperty("screenshot.width").toIntOrNull()?: 600)
 		WebDriverWait(this.driver, 10)
 		val javascript = driver as JavascriptExecutor
 		val screenshot = driver as TakesScreenshot
-		val scroll = driver.manage().window().size.height / 2
+		val scroll = windowInnerHeight(javascript) / 2
 
 		var lastTop = -1
 		val pages = mutableListOf<BufferedImage>()
 		val positions = mutableListOf<Int>()
 		Thread.sleep(5000)//Wait to load... it is horrible but it kind of work!
 		var data = javascript.executeScript(this.varsObfuscatorJS)
-		println(data)
 		while (lastTop != (javascript.executeScript("return window.scrollY") as Long).toInt()) {
+			javascript.executeScript("""
+				if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu").length == 1) {
+			    	document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu")[0].click()
+				}
+			""".trimIndent())
+			Thread.sleep(1000)//Wait to load... it is horrible but it kind of work!
 			data = javascript.executeScript("data = ${gson.toJson(data)}\n"+this.obfuscatorJS)
-			println(data)
 			val pos = (javascript.executeScript("return window.scrollY") as Long).toInt()
 			pages.add(ImageIO.read(ByteArrayInputStream(screenshot.getScreenshotAs(OutputType.BYTES))))
 			positions.add(pos)
@@ -83,7 +98,7 @@ class TwitterObfuscatedScreenshotCrawler(storage: MongoDBStorage, format: String
 			javascript.executeScript("window.scrollTo(0, ${lastTop + scroll})")
 		}
 
-		val pixelSize = pages[0].height.toDouble() / driver.manage().window().size.height
+		val pixelSize = pages[0].height.toDouble() / windowInnerHeight(javascript)
 		return stitchScreenshots(pages, positions.map { (it * pixelSize).toInt() })
 	}
 
@@ -125,4 +140,6 @@ fun stitchScreenshots(imgs: List<BufferedImage>, pos: List<Int>): BufferedImage 
 	return concatImage
 }
 
-
+private fun windowInnerHeight(javascriptExecutor: JavascriptExecutor): Long {
+	return javascriptExecutor.executeScript("return window.innerHeight") as Long
+}
