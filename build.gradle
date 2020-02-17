@@ -20,6 +20,7 @@ dependencies {
     implementation "org.seleniumhq.selenium:selenium-java:3.141.59"
     implementation "net.sourceforge.tess4j:tess4j:4.1.0"
     implementation "com.google.code.gson:gson:2.8.5"
+    implementation "org.jooby:jooby-undertow:1.6.6"
 }
 
 compileKotlin {
@@ -27,4 +28,12 @@ compileKotlin {
 }
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
+}
+
+task compìleExtension(type: Zip) {
+    from 'TwitterScrapper-FirefoxExtension/'
+    include '*'
+    include '*/*' //to include contents of a folder present inside Reports directory
+    archiveName 'extension.xpi'
+    destinationDir(file("$buildDir"))
 }

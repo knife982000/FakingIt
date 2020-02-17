@@ -1,0 +1,31 @@
+{
+
+    "description": "Intercepts Twitter's API calls for scrapping.",
+    "manifest_version": 2,
+    "name": "Twitter Crawler",
+    "version": "1.0",
+    "icons": {
+      "48": "icons/icon.png"
+    },
+
+    "permissions": [
+        "webRequest", "webRequestBlocking", "<all_urls>"
+      ],
+
+    "background": {
+        "scripts": ["scrapper.js"]
+      },
+
+    "applications": {
+      "gecko": {
+         "id": "scrapper@isistan.unicen.edu.ar"
+      }
+    },
+
+    "browser_specific_settings": {
+        "gecko": {
+          "strict_min_version": "57.0a1"
+        }
+    }
+}
+  

@@ -15,6 +15,7 @@ import java.util.*
 import kotlin.system.exitProcess
 
 import edu.isistan.fakenews.scrapper.*
+import org.openqa.selenium.WebDriver
 
 var DEBUG_CRAWLER = false
 var LOGGER = LoggerFactory.getLogger(TwitterCrawler::class.java)!!
@@ -75,7 +76,9 @@ private data class ConfigurationActivation(val time: Long, val configuration: Tw
 }
 
 
-class TwitterCrawler(val storage: MongoDBStorage) {
+class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
+	private var driver: WebDriver? = null
+
 	private val configurations = sortedSetOf<ConfigurationActivation>()
 			private lateinit var currentConfiguration: TwitterAuth
 
@@ -318,12 +321,14 @@ class TwitterCrawler(val storage: MongoDBStorage) {
 	//call tweetReplyDownload para armar la cadena de las cadenas
 	//después ver cómo reconstruir !!
 	private fun tweetReplyDownload(tweetIds : MutableList<Long>){
-
+		if (this.driver==null) {
+			this.driver = initFirefoxWithScrapperExtension()
+		}
 		val newIds = ArrayList<Long>()
 		tweetIds.filter{this.storage.findReplies(it) == null}.forEach{
 			val tweet = this.storage.findTweet(it)!!
 			val username = this.storage.findUser(tweet.userId!!)!!.screenName
-			val replies = getReplies(username,tweet.tweetId.toString())
+			val replies = getReplies(username,tweet.tweetId.toString(), driver)
 						
 			this.storage.storeTweetReplies(it,replies)
 			newIds.addAll(replies)
@@ -368,5 +373,16 @@ class TwitterCrawler(val storage: MongoDBStorage) {
 					this.storage.storeUserDownload(tweet.user.id)
 					urls.forEach { this.storage.storeUrlDownload(it, tweet.id) }
 		}
+	}
+
+	override fun close() {
+		if (this.driver != null) {
+			LOGGER.info("Closing Web Driver")
+			this.driver!!.quit()
+		}
+	}
+
+	protected fun finalize() {
+		this.close()
 	}
 }

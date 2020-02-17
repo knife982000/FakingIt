@@ -1,22 +1,28 @@
 package edu.isistan.fakenews.scrapper
 
+import com.google.gson.Gson
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
 
-import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import java.io.IOException
 import org.slf4j.LoggerFactory
 
 import javax.net.ssl.HttpsURLConnection
 import java.net.URL
-import java.io.InputStreamReader
-import java.io.BufferedReader
 import java.util.stream.Collectors
 
 import edu.isistan.fakenews.webcrawler.editDistance
+import org.jooby.Jooby
+import org.jooby.Request
+import org.jooby.Route
+import org.openqa.selenium.*
+import org.openqa.selenium.support.ui.WebDriverWait
+import java.io.*
+import java.util.concurrent.Semaphore
+import java.util.concurrent.locks.ReentrantLock
+import java.util.function.Supplier
+import kotlin.system.exitProcess
 
 class Scrapper 
 
@@ -38,42 +44,99 @@ const val search_path = "https://twitter.com/i/search/timeline?f=live&vertical=d
 var LOGGER = LoggerFactory.getLogger(Scrapper::class.java)!!
 
 
-fun getReplies(screenname : String, tweetId : String) : List<Long> {
+fun getReplies(screenname : String, tweetId : String, driver: WebDriver? = null) : List<Long> {
+
+	val localDriver = when (driver) {
+		null -> initFirefoxWithScrapperExtension()
+		else -> driver
+	}
 
 	LOGGER.debug("Processing replies {} {}",screenname, tweetId)
 
-	val replies = ArrayList<Long>()
-
-	var things = queryStaticHTLM(screenname,tweetId)
-	var cursor = things.get(0) as String?
-
-	val urlReplies = replies_path.replace(_TWEET,tweetId).replace(_USER,screenname)
-	
-	replies.addAll(things.get(1) as List<Long>)
-
-			while(cursor != null) {
-
-				val url = urlReplies.replace(_POS,cursor)
-				val jsonObject = getURLContent(url)!!;
-				
-				println(jsonObject)
-				
-				val html = jsonObject.get("items_html").getAsString()
-
-				val doc = Jsoup.parse(html);
-
-				replies.addAll(parseReplies(doc))
-				
-				if(jsonObject.get("has_more_items").getAsBoolean())
-					cursor = jsonObject.get("min_position").getAsString();
-				else 
-					cursor = doc.getElementsByClass("ThreadedConversation-showMoreThreadsButton u-textUserColor")?.first()?.attr("data-cursor")
-				
+	val replies = mutableListOf<Long>()
+	val semaphore = Semaphore(0)
+	//Server logic supplier
+	val serverSupplier = Supplier<Jooby> {
+		object :Jooby() {
+			val mutex = ReentrantLock()
+			val gson = Gson()
+			var exitOk = false
+			init {
+				post("/replies", Route.OneArgHandler { this.addReplies(it) })
+				post("/error", Route.OneArgHandler {
+					LOGGER.warn("Error in the Extension ${it.body().value()}. If data is empty it might be ignored.")
+				})
+				get("/quit", Route.ZeroArgHandler { this.close() })
 			}
 
-	LOGGER.debug("Gotten replies {} {} size: {}",screenname, tweetId,replies.size)
+			fun addReplies(request: Request): String {
+				val map = gson.fromJson(request.body().value(), Map::class.java)
+				val tweets = (map.keys.toList() as List<String>).map { it.toLong() }
+				mutex.lock()
+				replies.addAll(tweets)
+				mutex.unlock()
+				return "Ok"
+			}
 
+			//Closes the server and returns the control to the main thread
+			fun close(): String {
+				this.exitOk = true
+				Thread {
+					this.stop()
+					semaphore.release()
+				}.start()
+				return "Ok"
+			}
+		}
+	}
+	//Starting server
+	Jooby.run(serverSupplier, "application.port=8080")
+	//Scroll twitter with extension
+	scrollConversation(screenname, tweetId, localDriver)
+	semaphore.acquire()
+
+	if (driver == null) {
+		LOGGER.info("Closing Selenium Driver")
+		localDriver.quit()
+	}
 	return replies;
+}
+
+private fun scrollConversation(screenname: String, tweetId: String, driver: WebDriver) {
+	val url = "https://twitter.com/${screenname}/status/${tweetId}"
+	driver.get(url)
+	driver.manage().window().maximize()
+	WebDriverWait(driver, 10)
+	val javascript = driver as JavascriptExecutor
+	val scroll = 348//driver.manage().window().size.height / 2
+
+	var lastTop = -1
+	Thread.sleep(5000)//Wait to load... it is horrible but it kind of work!
+
+	while (lastTop != (javascript.executeScript("return window.scrollY") as Long).toInt()) {
+		javascript.executeScript("""
+			if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu").length == 1) {
+			    document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu")[0].click()
+			}
+		""".trimIndent())
+		lastTop = (javascript.executeScript("return window.scrollY") as Long).toInt()
+		javascript.executeScript("window.scrollTo(0, ${lastTop + scroll})")
+	}
+	//closes the web service
+	//and the driver
+	javascript.executeScript("""
+		let xhttp = new XMLHttpRequest()
+        xhttp.open("GET", "http://localhost:8080/quit") 
+		xhttp.send()
+	""".trimIndent()
+	)
+}
+
+fun addFirefoxExtension(driver: WebDriver) {
+	driver.get("about:debugging#/runtime/this-firefox")
+	val javascript = driver as JavascriptExecutor
+	javascript.executeScript("document.getElementsByClassName(\"undefined default-button qa-temporary-extension-install-button\")[0].click()")
+	exitProcess(1)
 }
 
 
@@ -287,6 +350,6 @@ fun main(){
 	val list = getReactions(tweet_id,"retweeted")
 	println(list);
 	
-	val text = "Ofelia Fernandéz presentó sus primeros proyectos como legisladora"
+	val text = "Ofelia Fernand?z present? sus primeros proyectos como legisladora"
 	print(getSearchedTweet(text))
 }
