@@ -154,9 +154,38 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 		this.tweetReplyDownload(tweetIds) //scrapper
 		this.tweetReactionsDownload(tweetIds,"favorited") //scrapper
 		this.tweetReactionsDownload(tweetIds,"retweeted") //scrapper
-		
+
 //		this.usersCrawlToDownload()
 
+	}
+
+	/**
+	 * Downloads the parents of the tweets in the list id
+	 * @param tweetIds tweet ids to download. They must be already downloaded
+	 * @param downloadFull selects whether to download only de tweets or thier replies and reactions
+	 * @return The map of the tweetid to tree root tweetId
+	 * **/
+	fun downloadInReplieToTweets(tweetIds: List<Long>, downloadFull: Boolean=false): Map<Long, Long> {
+		var finalMap = tweetIds.map { it to it }.toMap().toMutableMap()
+		var download = tweetIds
+		LOGGER.info("Downloading replies")
+		while (download.isNotEmpty()) {
+			LOGGER.debug("Downloading replies: {}", download.size)
+			val local = download.map { this.storage.findTweet(it) }.
+				filterNotNull().
+				filter { it.inReplyToStatusId != -1L }.
+				map { it.tweetId to it.inReplyToStatusId }.toMap()
+			finalMap.replaceAll { k, v -> local[v]?: v }
+			download = local.values.toMutableList()
+			if (downloadFull) {
+				this.run(download)
+			} else {
+				this.twitterCrawl(download)
+			}
+
+		}
+		LOGGER.info("No more replies found")
+		return finalMap
 	}
 
 	private fun retryTwitterDownloadWrapper(action: ()->Unit) {
