@@ -19,6 +19,7 @@ import org.jooby.Route
 import org.openqa.selenium.*
 import org.openqa.selenium.support.ui.WebDriverWait
 import java.io.*
+import java.lang.Exception
 import java.util.concurrent.Semaphore
 import java.util.concurrent.locks.ReentrantLock
 import java.util.function.Supplier
@@ -114,31 +115,32 @@ private fun scrollConversation(screenname: String, tweetId: String, driver: WebD
 	var lastTop = -1
 	Thread.sleep(5000)//Wait to load... it is horrible but it kind of work!
 
-	while (lastTop != (javascript.executeScript("return window.scrollY") as Long).toInt()) {
-		javascript.executeScript("""
+	try {
+		while (lastTop != windowScrollY(javascript).toInt()) {
+			javascript.executeScript(
+				"""
 			if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu").length == 1) {
 			    document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu")[0].click()
 			}
-		""".trimIndent())
-		Thread.sleep(1000)//Wait to load... it is horrible but it kind of work!
-		lastTop = (javascript.executeScript("return window.scrollY") as Long).toInt()
-		javascript.executeScript("window.scrollTo(0, ${lastTop + scroll})")
-	}
-	//closes the web service
-	//and the driver
-	javascript.executeScript("""
+		""".trimIndent()
+			)
+			Thread.sleep(1000)//Wait to load... it is horrible but it kind of work!
+			lastTop = windowScrollY(javascript).toInt()
+			javascript.executeScript("window.scrollTo(0, ${lastTop + scroll})")
+		}
+		//closes the web service
+		//and the driver
+		javascript.executeScript(
+			"""
 		let xhttp = new XMLHttpRequest()
         xhttp.open("GET", "http://localhost:8080/quit") 
 		xhttp.send()
 	""".trimIndent()
-	)
-}
-
-fun addFirefoxExtension(driver: WebDriver) {
-	driver.get("about:debugging#/runtime/this-firefox")
-	val javascript = driver as JavascriptExecutor
-	javascript.executeScript("document.getElementsByClassName(\"undefined default-button qa-temporary-extension-install-button\")[0].click()")
-	exitProcess(1)
+		)
+	}catch (e: Exception) {
+		e.printStackTrace()
+		exitProcess(1)
+	}
 }
 
 

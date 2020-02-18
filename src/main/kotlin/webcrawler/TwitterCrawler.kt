@@ -1,6 +1,8 @@
 package edu.isistan.fakenews.webcrawler
 
 import com.google.gson.Gson
+import edu.isistan.fakenews.scrapper.windowInnerHeight
+import edu.isistan.fakenews.scrapper.windowScrollY
 import edu.isistan.fakenews.storage.MongoDBStorage
 import org.openqa.selenium.Dimension
 import java.awt.image.BufferedImage
@@ -30,14 +32,14 @@ class TwitterScreenshotCrawler(storage: MongoDBStorage, format: String = "png"):
 		val pages = mutableListOf<BufferedImage>()
 		var positions = mutableListOf<Int>()
 		Thread.sleep(5000)//Wait to load... it is horrible but it kind of work!
-		while (lastTop != (javascript.executeScript("return window.scrollY") as Long).toInt()) {
+		while (lastTop != windowScrollY(javascript).toInt()) {
 			javascript.executeScript("""
 				if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu").length == 1) {
 			    	document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu")[0].click()
 				}
 			""".trimIndent())
 			Thread.sleep(1000)//Wait to load... it is horrible but it kind of work!
-			val pos = (javascript.executeScript("return window.scrollY") as Long).toInt()
+			val pos = windowScrollY(javascript).toInt()
 			pages.add(ImageIO.read(ByteArrayInputStream(screenshot.getScreenshotAs(OutputType.BYTES))))
 			positions.add(pos)
 			lastTop = pos
@@ -83,7 +85,7 @@ class TwitterObfuscatedScreenshotCrawler(storage: MongoDBStorage, format: String
 		val positions = mutableListOf<Int>()
 		Thread.sleep(5000)//Wait to load... it is horrible but it kind of work!
 		var data = javascript.executeScript(this.varsObfuscatorJS)
-		while (lastTop != (javascript.executeScript("return window.scrollY") as Long).toInt()) {
+		while (lastTop != windowScrollY(javascript).toInt()) {
 			javascript.executeScript("""
 				if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu").length == 1) {
 			    	document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu")[0].click()
@@ -91,7 +93,7 @@ class TwitterObfuscatedScreenshotCrawler(storage: MongoDBStorage, format: String
 			""".trimIndent())
 			Thread.sleep(1000)//Wait to load... it is horrible but it kind of work!
 			data = javascript.executeScript("data = ${gson.toJson(data)}\n"+this.obfuscatorJS)
-			val pos = (javascript.executeScript("return window.scrollY") as Long).toInt()
+			val pos = windowScrollY(javascript).toInt()
 			pages.add(ImageIO.read(ByteArrayInputStream(screenshot.getScreenshotAs(OutputType.BYTES))))
 			positions.add(pos)
 			lastTop = pos
@@ -142,6 +144,3 @@ fun stitchScreenshots(imgs: List<BufferedImage>, pos: List<Int>): BufferedImage 
 	return concatImage
 }
 
-private fun windowInnerHeight(javascriptExecutor: JavascriptExecutor): Long {
-	return javascriptExecutor.executeScript("return window.innerHeight") as Long
-}

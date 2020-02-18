@@ -1,6 +1,7 @@
 package edu.isistan.fakenews.scrapper
 
 import com.google.gson.Gson
+import org.openqa.selenium.JavascriptExecutor
 import java.net.ServerSocket
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.firefox.FirefoxBinary
@@ -136,4 +137,17 @@ private fun loadExtension(path: String, port: Int) {
     }).start()
 
     ready.acquire()
+}
+
+
+fun windowInnerHeight(javascriptExecutor: JavascriptExecutor): Long {
+    return javascriptExecutor.executeScript("return window.innerHeight") as Long
+}
+
+fun windowScrollY(javascriptExecutor: JavascriptExecutor): Long {
+    val o = javascriptExecutor.executeScript("return window.scrollY")
+    if (o is Double) {
+        return o.toLong()
+    }
+    return o as Long
 }
