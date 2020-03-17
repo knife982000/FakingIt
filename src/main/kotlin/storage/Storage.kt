@@ -74,8 +74,8 @@ data class MediaEntity(override var url: String="",
  */
 data class Tweet<T>(var id: T?=null,
                     var tweetId: Long=0,
-                    var userId: Long=0, //Stored in another collection
-//					var userScreenname : String?=null, //necesito guardarlo para los replies :( y por las dudas que los usuarios no estén todavía almacenados
+                    var userId: Long=-1, //Stored in another collection
+//					var userScreenname : String?=null, //necesito guardarlo para los replies :( y por las dudas que los usuarios no estï¿½n todavï¿½a almacenados
                     var text: String="",
                     var created: Date= Date(),
                     var source: String="", //is it important?

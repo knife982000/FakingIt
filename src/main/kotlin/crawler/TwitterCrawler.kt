@@ -36,7 +36,7 @@ fun TwitterAuth.createConfiguration(): Configuration {
 			setApplicationOnlyAuthEnabled(true)
 
 	try {
-			val token = TwitterFactory(configurationToken.build()).getInstance().getOAuth2Token();
+			val token = TwitterFactory(configurationToken.build()).getInstance().getOAuth2Token()
 
 			val configurationBuilder = ConfigurationBuilder().
 					setApplicationOnlyAuthEnabled(true).
@@ -166,7 +166,7 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 	 * @return The map of the tweetid to tree root tweetId
 	 * **/
 	fun downloadInReplieToTweets(tweetIds: List<Long>, downloadFull: Boolean=false): Map<Long, Long> {
-		var finalMap = tweetIds.map { it to it }.toMap().toMutableMap()
+		val finalMap = tweetIds.map { it to it }.toMap().toMutableMap()
 		var download = tweetIds
 		LOGGER.info("Downloading replies")
 		while (download.isNotEmpty()) {
@@ -235,6 +235,7 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 		}.forEach {
 			retryTwitterDownloadWrapper {
 				twitter.lookupUsers(*it).forEach {
+					System.err.println(it)
 					this.storage.storeUser(it)
 				}
 			}
@@ -306,13 +307,20 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 		}
 		LOGGER.info("User {} downloaded", userId)
 	}
-	
-	//esto gasta muchas consultas !! estás llamando para descargar de a uno los usuarios!
+
 	private fun usersCrawlToDownload() {
 		while (true) {
-			val userDownload = this.storage.nextUserDownload() ?: break
-					userCrawl(userDownload.userId)
-					this.storage.removeUserDownload(userDownload)
+			val usersIdDownload = this.storage.nextBatchUserDownload().map {
+				it.userId
+			}.toLongArray()
+			if (usersIdDownload.isEmpty()) {
+				break
+			}
+			LOGGER.info("Downloading batch of users. Size: {}", usersIdDownload.size)
+			this.usersCrawl(usersIdDownload)
+			usersIdDownload.forEach {
+				this.storage.removeUserDownload(it)
+			}
 		}
 		LOGGER.info("All users have been downloaded")
 	}
@@ -399,7 +407,9 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 			val urls = mutableSetOf<String>()
 					urls.addAll(tweet.urlEntities.map { it.expandedURL })
 					urls.addAll(tweet.mediaEntities.map { it.expandedURL })
-					this.storage.storeUserDownload(tweet.user.id)
+					if (tweet.user != null) {
+						this.storage.storeUserDownload(tweet.user.id)
+					}
 					urls.forEach { this.storage.storeUrlDownload(it, tweet.id) }
 		}
 	}

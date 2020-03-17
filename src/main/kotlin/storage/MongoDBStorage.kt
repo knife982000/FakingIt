@@ -84,7 +84,7 @@ var LOGGER = LoggerFactory.getLogger(MongoDBStorage::class.java)!!
  * Converts a Status from Twitter4J into a Tweet object for storage
  */
 fun Status.toStorage(): Tweet<ObjectId> {
-    return Tweet(null, this.id, this.user.id, this.text, this.createdAt, this.source, this.displayTextRangeStart,
+    return Tweet(null, this.id, this.user?.id?:-1, this.text, this.createdAt, this.source, this.displayTextRangeStart,
         this.displayTextRangeEnd, this.isTruncated, this.inReplyToStatusId, this.inReplyToUserId, this.inReplyToScreenName,
         this.geoLocation.toStorage(), this.place?.id, this.favoriteCount, this.isRetweet, this.currentUserRetweetId,
         this.contributors?.toMutableList(),this.retweetCount, this.isPossiblySensitive, this.lang, this.quotedStatusId,
@@ -346,6 +346,10 @@ class MongoDBStorage: AutoCloseable, Closeable {
         return this.userDownloads.find().first()
     }
 
+    fun nextBatchUserDownload(size: Int=99): List<UserDownload<ObjectId>> {
+        return this.userDownloads.find().take(size).toList()
+    }
+
 	fun findUsersDownload() : List<Long>{
 		return this.userDownloads.find().toList().stream().map(UserDownload<ObjectId>::userId).collect(Collectors.toList())
 	}
@@ -434,7 +438,7 @@ class MongoDBStorage: AutoCloseable, Closeable {
     }
 
 	  fun removeUserDownload(user: Long): Boolean {
-        if (this.userDownloads.find(Filters.eq(USER_ID,user)) == null)
+        if (this.userDownloads.find(Filters.eq(USER_ID,user)).first() == null)
             return false
         return this.userDownloads.deleteOne(Filters.eq(USER_ID, user)).wasAcknowledged()
     }
