@@ -24,8 +24,8 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.locks.ReentrantLock
 import java.util.function.Supplier
 import kotlin.system.exitProcess
-
-class Scrapper 
+import com.google.gson.stream.MalformedJsonException
+import org.jsoup.select.Elements
 
 const val _USER = "#USER"
 const val _TWEET = "#TWEET"
@@ -35,13 +35,23 @@ const val _WHAT = "retweeted"
 const val replies_base_path = "https://twitter.com/${_USER}/status/${_TWEET}" 
 const val replies_path = "https://twitter.com/i/${_USER}/conversation/${_TWEET}?include_available_features=1&include_entities=1&max_position=${_POS}&&reset_error_state=false"
 
-const val reactions_base_path = "https://twitter.com/i/activity/${_WHAT}_popup?id=${_TWEET}"
+const val reactions_base_path = "hhttp://marketplace.eclipse.org/marketplace-client-intro?mpc_install=2257536ttps://twitter.com/i/activity/${_WHAT}_popup?id=${_TWEET}"
 
-const val search_base_path = "https://twitter.com/i/search/timeline?f=tweets&vertical=default&include_available_features=1&include_entities=1&reset_error_state=false&src=typd&q=${_TWEET}&l=en"
-
-const val search_path = "https://twitter.com/i/search/timeline?f=live&vertical=default&include_available_features=1&include_entities=1&reset_error_state=false&src=typd&max_position=${_POS}&q=${_TWEET}&l=en"
+//const val search_base_path = "https://twitter.com/i/search/timeline?f=tweets&vertical=default&include_available_features=1&include_entities=1&reset_error_state=false&src=typd&q=${_TWEET}&l=en"
+//const val search_path = "https://twitter.com/i/searhttp://marketplace.eclipse.org/marketplace-client-intro?mpc_install=2257536ch/timeline?f=live&vertical=default&include_available_features=1&include_entities=1&reset_error_state=false&src=typd&max_position=${_POS}&q=${_TWEET}&l=en"
 //const val search_path = "https://twitter.com/search?q=${_TWEET}&source=desktop-search"
 //const val search_path = "https://twitter.com/i/search/timeline?f=live&src=typd&max_position=${_POS}&q=${_TWEET}&l=en"
+//const val search_base_path = "https://mobile.twitter.com/search?q=${_TWEET}&s=typd&x=0&y=0"
+const val search_path = "https://mobile.twitter.com/search?q=${_TWEET}&s=typd&next_cursor=${_POS}"
+
+	const val pattern_punct = "[\\p{Punct}+2]"
+	const val pattern_unico = "&#*[0-9a-z]*;"
+	const val pattern_RT = "RT @[a-zA-Z0-9]*:"
+	const val pattern_url = "((https?|ftp|gopher|telnet|file|Unsure|http):((//)|(\\\\))+[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]*)";
+
+
+class Scrapper 
+
 var LOGGER = LoggerFactory.getLogger(Scrapper::class.java)!!
 
 
@@ -197,33 +207,38 @@ private fun parseReplies(doc : Document) : List<Long> {
 	return reps;
 }
 
-private fun getURLContent(url : String) : JsonObject?{
+private fun getURLContent(url : String,enable_javascript : Boolean = true) : String?{
 
 	LOGGER.debug("URL: {}",url)
 
 	var con : HttpsURLConnection?
 	var retry = true
 
-	var jsonObject : JsonObject? = null
+	var content : String? = null
 	
 		while(retry) {
 			try {
 				con = URL(url).openConnection() as HttpsURLConnection;
-				con.setRequestProperty("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/603.3.8 (KHTML, like Gecko) Version/10.1.2 Safari/603.3.8");
+				if(enable_javascript)
+					con.setRequestProperty("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/603.3.8 (KHTML, like Gecko) Version/10.1.2 Safari/603.3.8");
+				else
+					con.setRequestProperty("User-Agent","ELinks/0.13.GIT (textmode; Linux 2.6.29 i686; 119x51-2)")
 				val br =  BufferedReader(InputStreamReader(con.getInputStream()))
 
-				jsonObject = JsonParser().parse(br.lines().collect(Collectors.joining())).getAsJsonObject()
+				content = br.lines().collect(Collectors.joining())
+				
+				try{
+				    val jsonObject = JsonParser().parse(content).getAsJsonObject()
+					content = jsonObject.get("items_html").getAsString()
+				}catch(e : Exception){}
 				
 				retry = false;
 
 			} catch (e : IOException) {
-				LOGGER.error("Error: {}",e.message)
+				LOGGER.error("Error: {} --> {}",url,e.message)
 			}
-
 		}
-
-	return jsonObject
-
+	return content
 }
 
 
@@ -269,39 +284,39 @@ fun getReactions(tweetId : String, what : String) : List<Long>{
 }
 
 fun getSearchedTweet(text : String) : Long{
+		
+	var searchableText = "\"${text.replace(Regex(pattern_unico),"").replace(Regex(pattern_RT),"").replace(Regex(pattern_url),"").replace(Regex(pattern_punct),"").trim()}\""
 	
-	val searchableText = "\"${text.trim().replace(" ","%20").replace("'","%27")}\"" //%22
-	//.replace(' ', '%20').replace('#', '%23').replace(':', '%3A').replace('&', '%26')
-	
-	var cursor : String? = "0"
 	val tweets = mutableMapOf<Long,String>()
 
-	val urlText = search_path.replace(_TWEET,searchableText)
+	var urlText : String? = search_path.replace(_TWEET,searchableText.replace(Regex("\\s"),"%20"))
 	
-	while(cursor != null) {
+	while(urlText != null) {
 
-		val url = urlText.replace(_POS,cursor)
-	
-		val jsonObject = getURLContent(url)!!;
+		val html = getURLContent(urlText,false)!!;
 				
-		val html = jsonObject.get("items_html").getAsString()
 		val doc = Jsoup.parse(html)!!
 
 		tweets.putAll(parseSearch(doc))
-				
-		if(jsonObject.get("has_more_items").getAsBoolean())
-			cursor = jsonObject.get("min_position").getAsString()
+
+		val e = doc.getElementsByClass("w-button-more")
+		if(e.size > 0)
+			urlText = "https://mobile.twitter.com"+e.first().childNodes().get(1).attr("href")
 		else
-			cursor = null
-				
+			urlText = null				
 	}
 
 	LOGGER.debug("Gotten search {} size: {}", text,tweets.size)
 	
-	//time to process the retrieved tweets!
-	val closest = getClosestTweet(text,tweets)
+	if(tweets.size > 1)
+		return getClosestTweet(searchableText,tweets)
 	
-	return closest	
+	if(tweets.size == 1)
+		return tweets.keys.iterator().next()
+	
+	return -1
+	
+//	return closest	
 }
 
 private fun getClosestTweet(text : String, tweets : MutableMap<Long,String>) : Long {
@@ -311,8 +326,11 @@ private fun getClosestTweet(text : String, tweets : MutableMap<Long,String>) : L
 	var closest_text : String? = null
 	
 	tweets.forEach{
-		val d = editDistance(text,it.value)
-		println("$d ${it.value}")
+		
+		val tt = it.value.replace(Regex(pattern_unico),"").replace(Regex(pattern_RT),"").replace(Regex(pattern_url),"").replace(Regex(pattern_punct),"")
+	
+		val d = editDistance(text,tt)
+//		println("$d ${it.value}")
 		if(sim >= d){
 			sim = d
 			closest = it.key
@@ -329,31 +347,42 @@ private fun getClosestTweet(text : String, tweets : MutableMap<Long,String>) : L
 private fun parseSearch(doc : Document) : MutableMap<Long,String>{
 	
 	val tweets = mutableMapOf<Long,String>()
-	
-	val urlPattern = "((https?|ftp|gopher|telnet|file|Unsure|http):((//)|(\\\\))+[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]*)";
-    val twiterUrlPattern = "([[\\S]*.]*(twitter.com)+[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]*)"
-	
-	doc.getAllElements().filter{it.className().startsWith("js-stream-item stream-item stream-item")}.forEach{
 		
-		val id = it.getElementsByAttribute("data-tweet-id").first().attr("data-tweet-id").toLong()
-		
-		val tweet = it.getElementsByClass("TweetTextSize  js-tweet-text tweet-text").first().text().toString().replace(Regex(urlPattern),"").replace(Regex(twiterUrlPattern),"")
-		
-		tweets.put(id,tweet)
-		
+	doc.getAllElements().filter{it.className().startsWith("tweet-text")}.forEach{
+		val id = it.attr("data-id").toLong()
+		tweets.put(id,it.getElementsByClass("dir-ltr").text().toString())
 	}
-	
+		
 	return tweets
 }
+
+fun searchTweets(tweetTexts : MutableList<String>) : MutableList<Long>{
+	val tweetIds = mutableListOf<Long>()
+	
+	tweetTexts.forEach{
+		val closest = getSearchedTweet(it)
+		if(closest > 0)
+			tweetIds.add(closest)
+	}
+	
+	return tweetIds
+}
+
 
 fun main(){
 //	val screenname = "OfeFernandez_"
 	val tweet_id = "1210306953936855043"
 //	val list = getReplies(screenname,tweet_id)
 	
-	val list = getReactions(tweet_id,"retweeted")
-	println(list);
+//	val list = getReactions(tweet_id,"retweeted")
+//	println(list);
 	
-	val text = "Ofelia Fernand?z present? sus primeros proyectos como legisladora"
-	print(getSearchedTweet(text))
+//	val text = "got ya bitch tip toeing on my hardwood floors \"\" &#128514; http://t.co/cOU2WQ5L4q\""
+//	val text = "loving you"
+	
+	val tweets = mutableListOf<String>()
+	tweets.add("loving you")
+	tweets.add("got ya bitch tip toeing on my hardwood floors")
+	
+	print(searchTweets(tweets))
 }

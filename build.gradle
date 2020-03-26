@@ -13,6 +13,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     implementation "org.mongodb:mongodb-driver-sync:3.11.1"
     implementation "org.twitter4j:twitter4j-core:4.0.7"
+    implementation "org.twitter4j:twitter4j-stream:4.0.7"
     implementation "org.slf4j:slf4j-api:1.7.28"
     implementation "commons-cli:commons-cli:1.4"
     implementation "org.jsoup:jsoup:1.12.1"
@@ -30,7 +31,7 @@ compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
 }
 
-task compìleExtension(type: Zip) {
+task compileExtension(type: Zip) {
     from 'TwitterScrapper-FirefoxExtension/'
     include '*'
     include '*/*' //to include contents of a folder present inside Reports directory

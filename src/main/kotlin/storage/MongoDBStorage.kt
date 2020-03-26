@@ -50,6 +50,7 @@ const val TWEET_RETWEETERS_COLLECTION = "tweetRetweeters"
 
 const val TWEET_ID = "tweetId"
 const val USER_ID = "userId"
+const val USER_SCREENNAME = "screenName"
 const val BUCKET = "bucket"
 const val PLACE_ID = "placeId"
 const val QUERY_TEXT = "text"
@@ -68,6 +69,7 @@ const val RELATION = "rel"
 
 const val TWEET_ID_INDEX = "TWEET_ID_INDEX"
 const val USER_ID_INDEX = "USER_ID_INDEX"
+const val USER_SCREENNAME_INDEX = "USER_SCREENNAME_INDEX"
 const val PLACE_ID_INDEX = "PLACE_ID_INDEX"
 const val QUERY_TEXT_INDEX = "QUERY_TEXT_INDEX"
 const val QUERY_MAX_ID_INDEX = "MAX_ID_INDEX"
@@ -238,6 +240,8 @@ class MongoDBStorage: AutoCloseable, Closeable {
 
     fun findUser(userId: Long): User<ObjectId>? = this.users.find(Filters.eq(USER_ID, userId)).first()
 	
+	fun findUser(username: String): User<ObjectId>? = this.users.find(Filters.eq(USER_SCREENNAME, username)).first()
+	
 	fun findTweet(tweetId: Long): Tweet<ObjectId>? = this.tweets.find(Filters.eq(TWEET_ID, tweetId)).first()
 	
 	fun findReplies(tweetId : Long): TweetReplies<ObjectId>? = this.tweetReplies.find(Filters.eq(TWEET_ID,tweetId)).first()
@@ -283,6 +287,21 @@ class MongoDBStorage: AutoCloseable, Closeable {
         return this.queries.find(Filters.eq(QUERY_TEXT, query)).first()!!
     }
 
+	fun findOrStoreQuery(query: String, ids : MutableList<Long>): Query<ObjectId> {
+        LOGGER.debug("Searching Query {}", query)
+        var q = this.queries.find(Filters.eq(QUERY_TEXT, query)).first()
+        if (q != null){
+			q.tweetIds.addAll(ids)
+			this.queries.replaceOne(Filters.eq(MONGO_ID, q.id), q)
+			return q
+		}
+            
+		LOGGER.debug("The Query {} not found, creating a new one", query)
+        q = Query(null, query, ids)
+        this.queries.insertOne(q)
+        return this.queries.find(Filters.eq(QUERY_TEXT, query)).first()!!
+    }
+	
     fun findOrStoreQuery(query: Query<ObjectId>): Query<ObjectId> {
         LOGGER.debug("Persisting Query {}", query)
         if (query.id == null) {
@@ -543,6 +562,10 @@ class MongoDBStorage: AutoCloseable, Closeable {
         if (this.users.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
             LOGGER.info("Creating $USER_ID_INDEX for $USERS_COLLECTION")
             this.users.createIndex(Indexes.hashed(USER_ID), IndexOptions().name(USER_ID_INDEX))
+        }
+		 if (this.users.listIndexes().find { it.getString("name") == USER_SCREENNAME_INDEX } == null) {
+            LOGGER.info("Creating $USER_SCREENNAME_INDEX for $USERS_COLLECTION")
+            this.users.createIndex(Indexes.hashed(USER_SCREENNAME), IndexOptions().name(USER_SCREENNAME_INDEX))
         }
         if (this.places.listIndexes().find { it.getString("name") == PLACE_ID_INDEX } == null) {
             LOGGER.info("Creating $PLACE_ID_INDEX for $PLACES_COLLECTION")
