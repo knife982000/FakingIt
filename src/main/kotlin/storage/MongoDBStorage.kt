@@ -246,6 +246,15 @@ class MongoDBStorage: AutoCloseable, Closeable {
 	
 	fun findReplies(tweetId : Long): TweetReplies<ObjectId>? = this.tweetReplies.find(Filters.eq(TWEET_ID,tweetId)).first()
 
+	fun findReactions(tweetId: Long, what : String): TweetReactions<ObjectId>? {
+    	
+		when(what){
+			"favorited" -> return this.tweetFavorites.find(Filters.eq(TWEET_ID, tweetId)).first()
+			"retweeted" -> return this.tweetRetweeters.find(Filters.eq(TWEET_ID, tweetId)).first()
+			else -> return null
+		}
+	}
+	
 	fun findScreenshot(tweetId : Long): Document? = this.screenshotMetaData.find(Filters.eq(FILENAME,tweetId.toString())).first()
 	
 	fun findTweetScreenshot(tweetId : Long): Document? = this.tweetScreenshotMetaData.find(Filters.eq(FILENAME,tweetId.toString())).first()

@@ -445,14 +445,13 @@ private fun twitterCrawl(tweetIds : MutableList<Long>){
 		}
 	}		
 }
-
+	
 private fun tweetReactionsDownload(tweetIds : List<Long>, what : String){
 
-	for(tweetid in tweetIds){
-		if (this.storage.findReplies(tweetid) == null){
-			this.storage.storeTweetReactions(tweetid,getReactions(tweetid.toString(),what),what) //here we could add all users to usersDownload
-		}
-
+	tweetIds.filter{this.storage.findReactions(it,what) == null}.forEach{
+		val reactions = getReactions(it.toString(),what)
+//			if(reactions != null)
+				this.storage.storeTweetReactions(it,reactions,what) //here we could add all users to usersDownload
 	}
 }
 

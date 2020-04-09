@@ -47,7 +47,8 @@ fun main(args: Array<String>) {
 		//TODO: Add flag para no bajar recursivamente los replies de replies?
 	
 //	val args1 = arrayOf("-st","C:\\Users\\Anto\\Desktop\\twitter-hate\\ids_to_download.txt")
-	val args1 = arrayOf("-track")
+//	val args1 = arrayOf("-track")
+	val args1 = arrayOf("-t", "ids_teleton.txt")
 	
 	val options = Options()
 			val groups = OptionGroup()
@@ -251,6 +252,7 @@ fun downloadTweet(filename: String?,recursive : Boolean) {
 		val tweetCrawler = TwitterCrawler(storage)
 		tweetCrawler.run(tweetIds,recursive)
 		storage.close()
+		
 	}
 		
 }
@@ -309,16 +311,16 @@ fun downloadInReplyTo(filename: String?, full: Boolean) {
 	}
 
 }
-
+//TODO: ver si se pueden hacer queries combinadas
 //I always assume there is going to be a limit to what we want to crawl... but what if the limit is too high?
-fun trackRealTime(recursive : Boolean){ //TODO! --> Call the streamer and then the crawler for completing everything else!
+fun trackRealTime(recursive : Boolean){
 	
 	//first get parameters!
 	val topics = System.getProperty("stream.topics", null)
 	val language = System.getProperty("stream.language", null)
 	val locations = System.getProperty("stream.locations", null)
 	val users = System.getProperty("stream.users", null)
-	val max_statuses = System.getProperty("stream.max_tweets", "10000")
+	val max_statuses = System.getProperty("stream.max_tweets", "20000")
 
 	val storage = MongoDBStorage()
 	val tweetStream = TwitterStreamer(storage)
