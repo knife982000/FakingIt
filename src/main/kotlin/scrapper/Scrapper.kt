@@ -28,6 +28,8 @@ import com.google.gson.stream.MalformedJsonException
 import org.jsoup.select.Elements
 import java.net.HttpURLConnection
 
+import edu.isistan.fakenews.*
+
 
 const val _USER = "#USER"
 const val _TWEET = "#TWEET"
@@ -66,6 +68,8 @@ fun getReplies(screenname : String, tweetId : String, driver: WebDriver? = null)
 
 	LOGGER.debug("Processing replies {} {}",screenname, tweetId)
 
+	checkInternetAvailability()
+	
 	val replies = mutableListOf<Long>()
 	val semaphore = Semaphore(0)
 	//Server logic supplier
@@ -75,6 +79,7 @@ fun getReplies(screenname : String, tweetId : String, driver: WebDriver? = null)
 				val gson = Gson()
 				var exitOk = false
 				init {
+					checkInternetAvailability()
 			post("/replies", Route.OneArgHandler { this.addReplies(it) })
 			post("/error", Route.OneArgHandler {
 				LOGGER.warn("Error in the Extension ${it.body().value()}. If data is empty it might be ignored.")
@@ -83,7 +88,7 @@ fun getReplies(screenname : String, tweetId : String, driver: WebDriver? = null)
 		}
 
 		fun addReplies(request: Request): String {
-			checkInternetAvailability()
+			
 			val map = gson.fromJson(request.body().value(), Map::class.java)
 			val tweets = (map.keys.toList() as List<String>).map { it.toLong() }
 			mutex.lock()
@@ -438,19 +443,22 @@ fun searchTweets(tweetTexts : MutableList<String>) : MutableList<Long>{
 
 
 fun main(){
+	
+//	println(checkInternetAvailability())
 
-	println(checkInternetAvailability())
-
-	//	val screenname = "OfeFernandez_"
+	configure("settings.properties")
+	
+		val screenname = "OfeFernandez_"
 	val tweet_id = "1210306953936855043"
 	//	val tweet_id = "1247027648720756736"
-	//	val list = getReplies(screenname,tweet_id)
+		val list = getReplies(screenname,tweet_id)
+	println(list)
 
-	var list = getReactions(tweet_id,"retweeted")
-	println(list);
-
-	list = getReactions(tweet_id,"favorited")
-			println(list);
+//	var list = getReactions(tweet_id,"retweeted")
+//	println(list);
+//
+//	list = getReactions(tweet_id,"favorited")
+//			println(list);
 
 	//	val text = "got ya bitch tip toeing on my hardwood floors \"\" &#128514; http://t.co/cOU2WQ5L4q\""
 	//	val text = "loving you"

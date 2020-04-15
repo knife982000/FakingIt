@@ -81,6 +81,31 @@ class TwitterStreamer(val storage: MongoDBStorage){
 		return statuses_ids
 	}
 	
+	fun track(topics : Array<String>?, locations : Array<DoubleArray>?, lang : Array<String>?, users : MutableSet<Long>?, max_statuses : Int) : MutableSet<Long>{
+		
+		LOGGER.info("Tracking users: ${topics.toString()}, ${lang.toString()}, ${locations.toString()}")
+		
+		val lock = Object()
+		val statuses = mutableSetOf<Status>()
+		val statuses_ids = mutableSetOf<Long>()				
+		var tweetFilterQuery : FilterQuery? = null
+		
+		if(topics != null || lang != null || locations != null || users != null){
+			tweetFilterQuery = FilterQuery()
+			if(topics != null) tweetFilterQuery.track(*topics)
+			if(lang != null) tweetFilterQuery.language(*lang)
+			if(locations != null) tweetFilterQuery.locations(*locations)
+			if(users != null) tweetFilterQuery.follow(*users.toLongArray())
+			
+		}
+		
+		this.retryTwitterStreamWrapper{	
+			trackQuery(true,tweetFilterQuery,statuses,statuses_ids,max_statuses,lock)
+		}
+		
+		return statuses_ids
+	}
+	
 	private fun getListener(user : Boolean, statuses : MutableSet<Status>, statuses_ids : MutableSet<Long>, max_statuses : Int, lock : Object) : StreamListener{
 		
 		if(user){
@@ -131,9 +156,7 @@ class TwitterStreamer(val storage: MongoDBStorage){
 		
 		val statusListener = object : StatusListener{
 			
-			override fun onStatus(status : Status) {
-				processStatus(statuses,statuses_ids,status,max_statuses,lock)
-			}
+			override fun onStatus(status : Status) { processStatus(statuses,statuses_ids,status,max_statuses,lock) }
 			
 			override fun onDeletionNotice(statusDeletionNotice : StatusDeletionNotice){}
 			
@@ -181,7 +204,8 @@ class TwitterStreamer(val storage: MongoDBStorage){
 		
 		try {
 			synchronized (lock) {
-				lock.wait();
+				while(statuses_ids.size < max_statuses)
+					lock.wait();
 			}
 		} catch (e : InterruptedException) {
 			LOGGER.error(e.getLocalizedMessage())
@@ -221,11 +245,11 @@ class TwitterStreamer(val storage: MongoDBStorage){
 			statuses.forEach{ storeTweet(it) }
 			statuses.clear()
 		}
-				
-		if (statuses_ids.size > max_statuses) {
-			synchronized (lock) {
+			
+		
+		synchronized (lock) {	
+			if (statuses_ids.size > max_statuses) 
 				lock.notify();
-			}
 		}
 //				else
 //					statuses.add(status)
@@ -271,24 +295,25 @@ class TwitterStreamer(val storage: MongoDBStorage){
 fun main(){
 		
 		DEBUG_DB = true
-//		val storage = MongoDBStorage()
+		val storage = MongoDBStorage()
 		
-//		val streamer = TwitterStreamer(storage)
+		val streamer = TwitterStreamer(storage)
 		
-		val topic = arrayOf<String>("nintendo")
+		val topic = arrayOf<String>("stanford")
 		val locations = null //arrayOf<DoubleArray>()//doubleArrayOf(-0.489,51.28),doubleArrayOf(0.236,51.686))
 		
 		val lang = null //arrayOf<String>()
-		val max = 20
+		val max = 50
 	
-		val users = arrayOf<Long>(69416519)
-		
-		val tt = "nintendo, sony"
-	print(tt.split(",").toTypedArray().contentToString())
+		val userIds = mutableSetOf<Long>()
+		userIds.add(69416519)
+		userIds.add(33989170)
 		
 //		print(streamer.trackTopics(topic,locations,lang,max))
 	
 //		streamer.trackUsers(users,max)
 	
-//		storage.close()
+		streamer.track(topic,locations,lang,userIds,max)
+	
+		storage.close()
 	}

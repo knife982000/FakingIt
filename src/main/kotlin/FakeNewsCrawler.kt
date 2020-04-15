@@ -42,13 +42,13 @@ fun main(args: Array<String>) {
 	
 		//Add query augmentation
 		//Add visualization
+	
+		//Add multi-thread support for tracking
 			
-		//TODO: Las relaciones de usuarios que no se bajen al bajar los tweets! --> CAMBIAR!!
-		//TODO: Add flag para no bajar recursivamente los replies de replies?
 	
 //	val args1 = arrayOf("-st","C:\\Users\\Anto\\Desktop\\twitter-hate\\ids_to_download.txt")
 //	val args1 = arrayOf("-track")
-	val args1 = arrayOf("-t", "ids_teleton.txt")
+//	val args1 = arrayOf("-t", "ids_teleton.txt")
 	
 	val options = Options()
 			val groups = OptionGroup()
@@ -103,7 +103,7 @@ fun main(args: Array<String>) {
 
 			val parser: CommandLineParser = DefaultParser()
 			try { // parse the command line arguments
-				val line = parser.parse(options, args1) 
+				val line = parser.parse(options, args) 
 						if (options.hasOption("ddb"))
 							DEBUG_DB = true
 							configure(line.getOptionValue("conf", "settings.properties")!!)
@@ -327,11 +327,12 @@ fun trackRealTime(recursive : Boolean){
 	val tweetIds : MutableSet<Long>?
 	val tweetCrawler = TwitterCrawler(storage)
 	
+	
+	var userIds : MutableSet<Long>? = null
+	
 	if(users != null){
-		if(topics != null || language != null || locations != null)
-			LOGGER.warn("Real time tracking of users, ignoring the set topics or language or locations")
 		
-		val userIds = mutableSetOf<Long>()
+		userIds = mutableSetOf<Long>()
 		val downloadUsers = mutableSetOf<String>()
 				users.split(",").forEach{
 			try{
@@ -352,9 +353,9 @@ fun trackRealTime(recursive : Boolean){
 					userIds.add(u.userId)
 		}
 		
-		tweetIds = tweetStream.trackUsers(userIds.toLongArray(),max_statuses.toInt())
+//		tweetIds = tweetStream.trackUsers(userIds.toLongArray(),max_statuses.toInt())
 	}
-	else{ //topics, language, locations
+//	else{ //topics, language, locations
 		
 		var topics_arr : Array<String>? = null
 		var language_arr : Array<String>? = null
@@ -373,9 +374,11 @@ fun trackRealTime(recursive : Boolean){
 			locations_arr = arrayOf<DoubleArray>(doubleArrayOf(list[0].toDouble(),list[1].toDouble()),doubleArrayOf(list[2].toDouble(),list[3].toDouble()))
 		}
 			
-		tweetIds = tweetStream.trackTopics(topics_arr,locations_arr,language_arr,max_statuses.toInt())
+//		tweetIds = tweetStream.trackTopics(topics_arr,locations_arr,language_arr,max_statuses.toInt())
 		
-	}
+		tweetIds = tweetStream.track(topics_arr,locations_arr,language_arr,userIds,max_statuses.toInt())
+		
+//	}
 		
 	if(tweetIds.size > 0){ //once we got everything we wanted from the stream, we get everything else
 		

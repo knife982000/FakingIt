@@ -50,6 +50,7 @@ const val TWEET_RETWEETERS_COLLECTION = "tweetRetweeters"
 
 const val TWEET_ID = "tweetId"
 const val USER_ID = "userId"
+const val CREATED = "created"
 const val USER_SCREENNAME = "screenName"
 const val BUCKET = "bucket"
 const val PLACE_ID = "placeId"
@@ -69,6 +70,7 @@ const val RELATION = "rel"
 
 const val TWEET_ID_INDEX = "TWEET_ID_INDEX"
 const val USER_ID_INDEX = "USER_ID_INDEX"
+const val CREATED_INDEX = "CREATED_INDEX"
 const val USER_SCREENNAME_INDEX = "USER_SCREENNAME_INDEX"
 const val PLACE_ID_INDEX = "PLACE_ID_INDEX"
 const val QUERY_TEXT_INDEX = "QUERY_TEXT_INDEX"
@@ -567,6 +569,10 @@ class MongoDBStorage: AutoCloseable, Closeable {
         if (this.tweets.listIndexes().find { it.getString("name") == TWEET_ID_INDEX } == null) {
             LOGGER.info("Creating $TWEET_ID_INDEX for $TWEETS_COLLECTION")
             this.tweets.createIndex(Indexes.hashed(TWEET_ID), IndexOptions().name(TWEET_ID_INDEX))
+        }
+		if (this.tweets.listIndexes().find { it.getString("name") == CREATED_INDEX } == null) {
+            LOGGER.info("Creating $CREATED_INDEX for $TWEETS_COLLECTION")
+            this.tweets.createIndex(Indexes.hashed(CREATED), IndexOptions().name(CREATED_INDEX))
         }
         if (this.users.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
             LOGGER.info("Creating $USER_ID_INDEX for $USERS_COLLECTION")
