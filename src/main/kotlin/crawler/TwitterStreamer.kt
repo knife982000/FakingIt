@@ -247,8 +247,8 @@ class TwitterStreamer(val storage: MongoDBStorage){
 				
 		if(statuses.size > MAX_SAVE){
 			statuses.forEach{ storeTweet(it) }
-			statuses.clear()
 			this.storage.findOrStoreQuery(query,statuses.map{it.id}.toMutableList()) //update the query with the new ids
+			statuses.clear()
 		}
 			
 		synchronized (lock) {	
