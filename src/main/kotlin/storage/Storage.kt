@@ -149,6 +149,7 @@ data class Place<T>(var id: T?=null,
  */
 data class Query<T>(var id: T?=null,
                     var text: String="",
+                    var bucket: Int=0,
                     var tweetIds: MutableList<Long> = mutableListOf())
 
 

@@ -1,5 +1,6 @@
 package edu.isistan.fakenews.storage
 
+import com.mongodb.BasicDBObject
 import com.mongodb.MongoClientSettings
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
@@ -18,11 +19,13 @@ import org.bson.codecs.pojo.ClassModel
 import org.bson.codecs.pojo.PojoCodecProvider
 import org.bson.codecs.pojo.PropertyModelBuilder
 import org.bson.types.ObjectId
+import org.omg.CORBA.Object
 import org.slf4j.LoggerFactory
 import twitter4j.Status
 import java.io.Closeable
-import kotlin.math.min
 import java.util.stream.Collectors
+import kotlin.math.min
+
 
 var DEBUG_DB = false
 val FAKE_NEWS_DB by lazy { if (DEBUG_DB) "FakeNewsTest" else "FakeNews" }
@@ -66,6 +69,7 @@ const val MIMETYPE = "mimetype"
 const val ERROR = "error"
 const val REDIRECT = "redirect_to"
 const val RELATION = "rel"
+const val TWEET_IDS = "tweetIds"
 
 
 const val TWEET_ID_INDEX = "TWEET_ID_INDEX"
@@ -242,8 +246,15 @@ class MongoDBStorage: AutoCloseable, Closeable {
 
     fun findUser(userId: Long): User<ObjectId>? = this.users.find(Filters.eq(USER_ID, userId)).first()
 	
-	fun findUser(username: String): User<ObjectId>? = this.users.find(Filters.eq(USER_SCREENNAME, username)).first()
-	
+//	fun findUser(username: String): User<ObjectId>? = this.users.find(Filters.eq(USER_SCREENNAME, username)).first()
+
+    fun findUser(username: String): User<ObjectId>?{
+        val regexQuery = BasicDBObject()
+        regexQuery[USER_SCREENNAME] = BasicDBObject("\$regex", "$username")
+            .append("\$options", "i")
+        return this.users.find(regexQuery).first()
+    }
+
 	fun findTweet(tweetId: Long): Tweet<ObjectId>? = this.tweets.find(Filters.eq(TWEET_ID, tweetId)).first()
 	
 	fun findReplies(tweetId : Long): TweetReplies<ObjectId>? = this.tweetReplies.find(Filters.eq(TWEET_ID,tweetId)).first()
@@ -287,30 +298,66 @@ class MongoDBStorage: AutoCloseable, Closeable {
         return true
     }
 
+    fun updateTweet(tweet : Status): Boolean{
+        LOGGER.debug("Updating tweet {}", tweet.id)
+
+        if (tweet.user != null)
+            this.storeUser(tweet.user)
+        if (tweet.place != null)
+            this.storePlace(tweet.place)
+
+        var t = this.tweets.find(Filters.eq(TWEET_ID, tweet.id)).first()
+        t.userId = tweet.user.id
+        this.tweets.replaceOne(Filters.eq(MONGO_ID, t.id), t)
+
+        return true
+    }
+
     fun findOrStoreQuery(query: String): Query<ObjectId> {
         LOGGER.debug("Searching Query {}", query)
         var q = this.queries.find(Filters.eq(QUERY_TEXT, query)).first()
         if (q != null)
             return q
         LOGGER.debug("The Query {} not found, creating a new one", query)
-        q = Query(null, query, mutableListOf())
+        q = Query(null, query, 1, mutableListOf())
         this.queries.insertOne(q)
-        return this.queries.find(Filters.eq(QUERY_TEXT, query)).first()!!
+        return this.queries.find(Filters.eq(QUERY_TEXT, query))
+            .sort(Sorts.descending(BUCKET)).first()!!
     }
 
+    //edit to distribute elements over buckets
 	fun findOrStoreQuery(query: String, ids : MutableList<Long>): Query<ObjectId> {
         LOGGER.debug("Searching Query {}", query)
-        var q = this.queries.find(Filters.eq(QUERY_TEXT, query)).first()
-        if (q != null){
-			q.tweetIds.addAll(ids)
-			this.queries.replaceOne(Filters.eq(MONGO_ID, q.id), q)
-			return q
+        var currentQ = this.queries.find(Filters.eq(QUERY_TEXT, query))
+            .sort(Sorts.descending(BUCKET)).first()
+
+        var remaining = ids
+        var bucket = 1
+
+        if (currentQ != null){
+            bucket = currentQ.bucket + 1
+            val part = min(remaining.size, MAX_BUCKET - currentQ.tweetIds.size)
+            queries.updateOne(Filters.and(Filters.eq(QUERY_TEXT, query), Filters.eq(BUCKET, currentQ.bucket)),
+                Updates.addEachToSet(TWEET_IDS, remaining.subList(0, part)))
+
+            remaining = remaining.subList(part, remaining.size)
+            remaining.chunked(MAX_BUCKET).forEach {
+                queries.insertOne(Query(null, query, bucket++, it.toMutableList()))
+            }
+
+			return this.queries.find(Filters.eq(QUERY_TEXT, query))
+                .sort(Sorts.descending(BUCKET)).first()!!
 		}
-            
+
 		LOGGER.debug("The Query {} not found, creating a new one", query)
-        q = Query(null, query, ids)
-        this.queries.insertOne(q)
-        return this.queries.find(Filters.eq(QUERY_TEXT, query)).first()!!
+        remaining.chunked(MAX_BUCKET).forEach{
+            val q : Query<ObjectId> = Query(null, query, bucket,it.toMutableList())
+            this.queries.insertOne(q)
+            bucket++
+        }
+
+        return this.queries.find(Filters.eq(QUERY_TEXT, query))
+            .sort(Sorts.descending(BUCKET)).first()!!
     }
 	
     fun findOrStoreQuery(query: Query<ObjectId>): Query<ObjectId> {

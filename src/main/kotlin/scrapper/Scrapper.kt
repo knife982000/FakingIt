@@ -61,7 +61,7 @@ var LOGGER = LoggerFactory.getLogger(Scrapper::class.java)!!
 
 fun getReplies(screenname : String, tweetId : String, driver: WebDriver? = null) : List<Long> {
 
-	val localDriver = when (driver) {
+	var localDriver : WebDriver? = when (driver) {
 		null -> initFirefoxWithScrapperExtension()
 		else -> driver
 	}
@@ -111,12 +111,13 @@ fun getReplies(screenname : String, tweetId : String, driver: WebDriver? = null)
 	//Starting server
 	Jooby.run(serverSupplier, "application.port=8080")
 	//Scroll twitter with extension
-	scrollConversation(screenname, tweetId, localDriver)
+	scrollConversation(screenname, tweetId, localDriver!!)
 	semaphore.acquire()
 
 	if (driver == null) {
 		LOGGER.info("Closing Selenium Driver")
 		localDriver.quit()
+		localDriver = null
 	}
 	replies.removeAll { it == tweetId.toLong() }
 	return replies;

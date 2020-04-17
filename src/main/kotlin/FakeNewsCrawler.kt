@@ -47,7 +47,7 @@ fun main(args: Array<String>) {
 			
 	
 //	val args1 = arrayOf("-st","C:\\Users\\Anto\\Desktop\\twitter-hate\\ids_to_download.txt")
-//	val args1 = arrayOf("-track")
+//	val args1 = arrayOf("-track","-conf","settings_covid.properties")
 //	val args1 = arrayOf("-t", "ids_teleton.txt")
 	
 	val options = Options()
@@ -103,7 +103,7 @@ fun main(args: Array<String>) {
 
 			val parser: CommandLineParser = DefaultParser()
 			try { // parse the command line arguments
-				val line = parser.parse(options, args) 
+				val line = parser.parse(options, args)
 						if (options.hasOption("ddb"))
 							DEBUG_DB = true
 							configure(line.getOptionValue("conf", "settings.properties")!!)
@@ -334,7 +334,7 @@ fun trackRealTime(recursive : Boolean){
 		
 		userIds = mutableSetOf<Long>()
 		val downloadUsers = mutableSetOf<String>()
-				users.split(",").forEach{
+				users.split(",").map { it.trim() }.forEach{
 			try{
 				userIds.add(it.toLong())
 			}catch(e : NumberFormatException){
@@ -352,7 +352,7 @@ fun trackRealTime(recursive : Boolean){
 				if(u != null)
 					userIds.add(u.userId)
 		}
-		
+
 //		tweetIds = tweetStream.trackUsers(userIds.toLongArray(),max_statuses.toInt())
 	}
 //	else{ //topics, language, locations

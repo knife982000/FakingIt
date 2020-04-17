@@ -96,7 +96,6 @@ class TwitterStreamer(val storage: MongoDBStorage){
 			if(lang != null) tweetFilterQuery.language(*lang)
 			if(locations != null) tweetFilterQuery.locations(*locations)
 			if(users != null) tweetFilterQuery.follow(*users.toLongArray())
-			
 		}
 		
 		this.retryTwitterStreamWrapper{	
@@ -106,12 +105,12 @@ class TwitterStreamer(val storage: MongoDBStorage){
 		return statuses_ids
 	}
 	
-	private fun getListener(user : Boolean, statuses : MutableSet<Status>, statuses_ids : MutableSet<Long>, max_statuses : Int, lock : Object) : StreamListener{
+	private fun getListener(user : Boolean, statuses : MutableSet<Status>, statuses_ids : MutableSet<Long>, max_statuses : Int, query : String, lock : Object) : StreamListener{
 		
 		if(user){
 			val userListener = object : UserStreamListener{
 			
-			override fun onStatus(status : Status) { processStatus(statuses,statuses_ids,status,max_statuses,lock) }
+			override fun onStatus(status : Status) { processStatus(statuses,statuses_ids,status,max_statuses,query,lock) }
 			
 			override fun onDeletionNotice(statusDeletionNotice : StatusDeletionNotice){}
 			
@@ -127,14 +126,14 @@ class TwitterStreamer(val storage: MongoDBStorage){
 			override fun onDeletionNotice(directMessageId : Long, userId : Long) {} 
 			override fun onDirectMessage(directMessage : DirectMessage) {}
 			
-			override fun onFavorite(source : User, target : User , favoritedStatus : Status) { processStatus(statuses,statuses_ids,favoritedStatus,max_statuses,lock) }
+			override fun onFavorite(source : User, target : User , favoritedStatus : Status) { processStatus(statuses,statuses_ids,favoritedStatus,max_statuses,query,lock) }
 			
 			override fun onFavoritedRetweet(source : User, target : User, favoritedRetweeet : Status) {} // processStatus(statuses,statuses_ids,favoritedRetweeet,max_statuses,lock) }
 			
 			override fun onFollow(source : User, followedUser : User) {}
 			override fun onFriendList(friendIds : LongArray) {}
 			
-			override fun onQuotedTweet(source : User, target : User, quotingTweet : Status) { processStatus(statuses,statuses_ids,quotingTweet,max_statuses,lock) }
+			override fun onQuotedTweet(source : User, target : User, quotingTweet : Status) { processStatus(statuses,statuses_ids,quotingTweet,max_statuses,query,lock) }
 			override fun onRetweetedRetweet(source : User, target : User, retweetedStatus : Status) {} //processStatus(statuses,statuses_ids,retweetedStatus,max_statuses,lock) }
 			
 			override fun onUnblock(source : User, unblockedUser : User) {}
@@ -156,7 +155,7 @@ class TwitterStreamer(val storage: MongoDBStorage){
 		
 		val statusListener = object : StatusListener{
 			
-			override fun onStatus(status : Status) { processStatus(statuses,statuses_ids,status,max_statuses,lock) }
+			override fun onStatus(status : Status) { processStatus(statuses,statuses_ids,status,max_statuses,query,lock) }
 			
 			override fun onDeletionNotice(statusDeletionNotice : StatusDeletionNotice){}
 			
@@ -195,7 +194,9 @@ class TwitterStreamer(val storage: MongoDBStorage){
 	
 	private fun trackQuery(user : Boolean, tweetFilterQuery : FilterQuery?, statuses : MutableSet<Status>, statuses_ids : MutableSet<Long>, max_statuses : Int, lock : Object){
 		
-		twitterStr.addListener(getListener(user,statuses, statuses_ids,max_statuses,lock))
+		val query = tweetFilterQuery?.toString() ?: "random sampling"
+
+		twitterStr.addListener(getListener(user,statuses, statuses_ids,max_statuses,query,lock))
 		
 		if(tweetFilterQuery != null)
 			twitterStr.filter(tweetFilterQuery)
@@ -213,14 +214,17 @@ class TwitterStreamer(val storage: MongoDBStorage){
 		
 		twitterStr.shutdown();
 	
-		if(statuses.size > 0) statuses.forEach{ storeTweet(it) }
+		if(statuses.size > 0) {
+			statuses.forEach{ storeTweet(it) }
+			this.storage.findOrStoreQuery(query,statuses.map{it.getId()}.toMutableList())
+		}
 		
 		LOGGER.debug("${statuses_ids.size}")
 		
-		if(tweetFilterQuery != null)
-			this.storage.findOrStoreQuery(tweetFilterQuery.toString(),statuses_ids.toMutableList())
-		else
-			this.storage.findOrStoreQuery("random sampling",statuses_ids.toMutableList())
+//		if(tweetFilterQuery != null)
+//			this.storage.findOrStoreQuery(tweetFilterQuery.toString(),statuses_ids.toMutableList())
+//		else
+//			this.storage.findOrStoreQuery("random sampling",statuses_ids.toMutableList())
 	}
 	
 	//the same as in TwitterCrawler
@@ -236,17 +240,17 @@ class TwitterStreamer(val storage: MongoDBStorage){
 		urls.forEach { this.storage.storeUrlDownload(it, tweet.id) }
 	}
 }
-		
-	private fun processStatus(statuses : MutableSet<Status>, statuses_ids : MutableSet<Long>, status : Status,max_statuses : Int, lock : Object){
-		statuses.add(status); //going to add more than the defined number... something blocking?
+		//maybe it is not needed to keep the statuses_ids as an structure given that they are going to be added in each MAX_SAVE
+	private fun processStatus(statuses : MutableSet<Status>, statuses_ids : MutableSet<Long>, status : Status,max_statuses : Int, query : String, lock : Object){
+		statuses.add(status);
 		statuses_ids.add(status.getId())
 				
 		if(statuses.size > MAX_SAVE){
 			statuses.forEach{ storeTweet(it) }
 			statuses.clear()
+			this.storage.findOrStoreQuery(query,statuses.map{it.id}.toMutableList()) //update the query with the new ids
 		}
 			
-		
 		synchronized (lock) {	
 			if (statuses_ids.size > max_statuses) 
 				lock.notify();

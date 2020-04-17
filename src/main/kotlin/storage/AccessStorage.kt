@@ -22,6 +22,7 @@ import java.time.LocalDate
 import edu.isistan.fakenews.crawler.TwitterCrawler
 
 import edu.isistan.fakenews.*
+import edu.isistan.fakenews.storage.Query
 
 class AccessStorage
 
@@ -146,35 +147,49 @@ fun checkInconsistencies(path : String, storage : MongoDBStorage){
 fun checkAndProcessTweets(storage : MongoDBStorage){
 	
 	val tweetCrawler = TwitterCrawler(storage)
-	
-	while(storage.tweets.find().asSequence().map{it.tweetId}.find{storage.findReplies(it) == null} != null)
-		storage.tweets.find(Filters.lt("created",LocalDateTime.now().minusHours(7))).asSequence().map{it.tweetId}.chunked(3).forEach{
+
+	while(storage.queries.find().flatMap{it.tweetIds}.asSequence().find{storage.findReplies(it) == null} != null) {
+		storage.tweets.find(Filters.lt("created",LocalDateTime.now().minusHours(7))).asSequence().map{it.tweetId}.chunked(10000).forEach{
 			tweetCrawler.run(it)
-		} 
-	
-//	while(storage.tweets.find().asSequence().map{it.tweetId}.find{storage.findReplies(it) == null} != null)
-//		tweetCrawler.run(storage.tweets.find().filter{
-//			Duration.between(it.created.toInstant().atZone(ZoneId.systemDefault())
-//      .toLocalDateTime(), LocalDateTime.now()).toHours() > 7
-//	}.map{it.tweetId}.toMutableList())
-						
+		}
+	}
+
+//		storage.tweets.find(Filters.lt("created",LocalDateTime.now().minusHours(7))).asSequence().map{it.tweetId}.chunked(3).forEach{
+//			tweetCrawler.run(it)
+//		}
 }
 	
-
+fun formQuery(storage : MongoDBStorage){
+	val query = "FilterQuery{count=0, follow=[33989170, 144929758, 149991703, 4515126989, 69416519, 8105922, 54414081, 2953955753, 37494271, 35776604, 171650522, 152325528], track=[quedateencasa,  covid,  covid-19,  casa rosada,  cuarentena,  pami,  barbijo,  mÃ¡scara,  salud,  coronavirus,  solidaridad,  impuesto,  argentina,  caso,  muert,  infectado,  infectada,  test,  testeo,  testeomasivo,  tapaboca,  mÃ©dico,  enfermera,  viruschino,  virus,  virus chino,  jubilado,  pandemia,  mayorescuidados,  tapatelaboca,  cuidarteescuidarnos,  desarrollo social,  cancilleria argentina,  argentinaunida,  deuda], locations=null, language=[es], filter_level=null}\n"
+	storage.findOrStoreQuery(query,storage.tweets.find().map{it.tweetId}.toMutableList())
+}
 
 fun main(args: Array<String>){
 	
 	DEBUG_DB = true
 	val storage = MongoDBStorage()
 
-	configure("settings.properties")
-	
-//	configure(args[0])
-	
+//	configure("settings.properties")
+
+	if(args[0] == "-r"){
+		formQuery(storage)
+		configure(args[1])
+	}
+	else
+		configure(args[0])
+
+//
+//	println(storage.tweets.find().filter{ it.userId < 0}.toList().size)
+//
+
+//
+//	configure("settings.properties")
+//
 	checkAndProcessTweets(storage)
 	
-//			checkInconsistencies("ids_teleton.txt",storage)
+//	checkInconsistencies("ids_teleton.txt",storage)
 
 	storage.close()
 }
+
 

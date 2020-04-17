@@ -31,7 +31,9 @@ fun Twitter.lookupUsers404(vararg ids: Long): List<User>{
 	try {
 		return this.lookupUsers(*ids)
 	} catch (e: TwitterException) {
-		if (e.errorCode == HttpResponseCode.NOT_FOUND) {
+		
+		if (e.statusCode == HttpResponseCode.NOT_FOUND) {
+			LOGGER.warn("Users not found ${longArrayOf(*ids).contentToString()}")
 			return emptyList<User>()
 		}
 		throw e
@@ -170,29 +172,58 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 
 	}
 
+	//in case tweets are downloaded, we need to check the state of users, if user == -1 need to re download tweet
 	fun run(tweetIds : List<Long>,recursive : Boolean=false) {
 
 		this.retryTwitterDownloadWrapper { this.twitterCrawl(tweetIds) }
 
 		val tweetIdsFiltered = tweetIds.filter{this.storage.findTweet(it) != null}
-
+		
+		val mistaken = retrieveMistakenTweets(tweetIdsFiltered.filter{this.storage.findTweet(it)!!.userId < 0}.toList())
+		mistaken.forEach{
+			if(it.user != null && it.user!!.id > 0)
+				this.storage.updateTweet(it)
+		}
+		
 		val missingUsers = mutableListOf<Long>()
-				tweetIdsFiltered.forEach{
+		tweetIdsFiltered.forEach{
 			val l = this.storage.findTweet(it)!!.userId
-					if(this.storage.findUser(l) == null)
+			if(l > 0 && this.storage.findUser(l) == null)
 						missingUsers.add(l)
 		}
+		if(missingUsers.size > 0)
+			usersCrawl(missingUsers.toLongArray(),false,false,false)
 
-		usersCrawl(missingUsers.toLongArray(),false,false,false)
+		val tweetIdsFiltered2 = tweetIdsFiltered.filter{this.storage.findTweet(it)!!.userId > 0}.toList()
 
-		this.tweetReactionsDownload(tweetIdsFiltered,"favorited") //scrapper
-		this.tweetReactionsDownload(tweetIdsFiltered,"retweeted") //scrapper
+		this.tweetReactionsDownload(tweetIdsFiltered2,"favorited") //scrapper
+		this.tweetReactionsDownload(tweetIdsFiltered2,"retweeted") //scrapper
 
-		this.tweetReplyDownload(tweetIdsFiltered,recursive) //scrapper
-		if(this.driver != null)	(this.driver as WebDriver).quit()
+		this.tweetReplyDownload(tweetIdsFiltered2,recursive) //scrapper
+
+		if(this.driver != null)	{
+			(this.driver as WebDriver).quit()
+			this.driver = null
+		}
 		//this.usersCrawlToDownload()
 	}
 
+	fun retrieveMistakenTweets(mistaken : List<Long>) : MutableList<Status> {
+		val retrieved = mutableListOf<Status>()
+		
+		mistaken.
+		chunked(99).map {
+			it.toLongArray()
+		}.forEach {
+			retryTwitterDownloadWrapper {
+				LOGGER.info("Downloading tweets {}", it)
+				twitter.lookup(*it).forEach{retrieved.add(it)}
+				}
+			}
+			
+		return retrieved
+	}
+	
 	/**
 	 * Downloads the parents of the tweets in the list id
 	 * @param tweetIds tweet ids to download. They must be already downloaded
@@ -277,7 +308,7 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 	}
 
 	fun usersCrawl(ids: MutableSet<String>) {
-		LOGGER.info("Downloading user list")
+		LOGGER.info("Downloading user list {}",ids)
 		ids.filter {
 			this.storage.findUser(it) == null
 		}.chunked(99).map {
@@ -431,7 +462,7 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 	//for each tweet --> get replies, add all replies to tweetReplies, add replies ids to list
 	//call twitterCrawl al final para bajar los tweets de las respuestas.
 	//call tweetReplyDownload para armar la cadena de las cadenas
-	//después ver cómo reconstruir !!
+	//despuï¿½s ver cï¿½mo reconstruir !!
 	private fun tweetReplyDownload(tweetIds : List<Long>,recursive : Boolean = false){
 		if (this.driver==null) {
 			this.driver = initFirefoxWithScrapperExtension()
