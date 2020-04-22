@@ -19,6 +19,7 @@ function repliesInterceptor(details) {
     //push all the data into an array.
     filter.ondata = event => {
         data.push(event.data)
+        filter.write(event.data)
     }
     //push all the data into an array.
     filter.onstop = event => {
@@ -47,7 +48,7 @@ function repliesInterceptor(details) {
           xhttp.open("POST", "http://localhost:8080/error")
           xhttp.send(JSON.stringify({"error": error, "data": str}))
       }
-      filter.write(encoder.encode(str));
+      //filter.write(encoder.encode(str));
       filter.disconnect();
     }
   
@@ -63,6 +64,7 @@ function searchInterceptor(details) {
     //push all the data into an array.
     filter.ondata = event => {
         data.push(event.data)
+        filter.write(event.data)
     }
     //reconstructs the data and process it.
     filter.onstop = event => {
@@ -85,7 +87,7 @@ function searchInterceptor(details) {
       xhttp.open("POST", "http://localhost:8080/search")
       xhttp.send(JSON.stringify({"tweets": tweets, "users": users}))
 
-      filter.write(encoder.encode(str));
+      //filter.write(encoder.encode(str));
       filter.disconnect();
     }
   
