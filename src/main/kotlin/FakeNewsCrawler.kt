@@ -314,7 +314,6 @@ fun downloadInReplyTo(filename: String?, full: Boolean) {
 //TODO: ver si se pueden hacer queries combinadas
 //I always assume there is going to be a limit to what we want to crawl... but what if the limit is too high?
 fun trackRealTime(recursive : Boolean){
-	
 	//first get parameters!
 	val topics = System.getProperty("stream.topics", null)
 	val language = System.getProperty("stream.language", null)
@@ -324,7 +323,6 @@ fun trackRealTime(recursive : Boolean){
 
 	val storage = MongoDBStorage()
 	val tweetStream = TwitterStreamer(storage)
-	val tweetIds : MutableSet<Long>?
 	val tweetCrawler = TwitterCrawler(storage)
 	
 	
@@ -376,14 +374,13 @@ fun trackRealTime(recursive : Boolean){
 			
 //		tweetIds = tweetStream.trackTopics(topics_arr,locations_arr,language_arr,max_statuses.toInt())
 		
-		tweetIds = tweetStream.track(topics_arr,locations_arr,language_arr,userIds,max_statuses.toInt())
+		//tweetIds = tweetStream.track(topics_arr,locations_arr,language_arr,userIds,max_statuses.toInt())
+		val query = tweetStream.track(topics_arr,locations_arr,language_arr,userIds,max_statuses.toInt())
 		
 //	}
-		
-	if(tweetIds.size > 0){ //once we got everything we wanted from the stream, we get everything else
-		
-		tweetCrawler.run(tweetIds.toMutableList(),recursive)
-	}
+
+
+	tweetCrawler.run(storage.findAllQueryIds(query).asSequence().toMutableList(),recursive)
 	storage.close()
 }
 

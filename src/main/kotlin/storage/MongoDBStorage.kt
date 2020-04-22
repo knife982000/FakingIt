@@ -371,6 +371,12 @@ class MongoDBStorage: AutoCloseable, Closeable {
         return query
     }
 
+    fun findAllQueryIds(query: String): Iterator<Long> {
+        return this.queries.find(Filters.eq(QUERY_TEXT, query)).
+            sort(Sorts.ascending(BUCKET)).noCursorTimeout(true)
+            .asSequence().flatMap { it.tweetIds.asSequence() }.iterator()
+    }
+
     fun findOrStoreQueryDownload(queryDownload: String): QueryDownload<ObjectId> {
         LOGGER.debug("Searching Query Download {}", queryDownload)
         var q = this.queryDownloads.find(Filters.eq(QUERY_TEXT, queryDownload)).first()
