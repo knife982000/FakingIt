@@ -78,6 +78,7 @@ const val CREATED_INDEX = "CREATED_INDEX"
 const val USER_SCREENNAME_INDEX = "USER_SCREENNAME_INDEX"
 const val PLACE_ID_INDEX = "PLACE_ID_INDEX"
 const val QUERY_TEXT_INDEX = "QUERY_TEXT_INDEX"
+const val QUERY_BUCKET_INDEX = "QUERY_BUCKET_INDEX"
 const val QUERY_MAX_ID_INDEX = "MAX_ID_INDEX"
 const val URL_INDEX = "URL_INDEX"
 const val LENGTH_INDEX = "LENGTH_INDEX"
@@ -642,6 +643,10 @@ class MongoDBStorage: AutoCloseable, Closeable {
         if (this.queries.listIndexes().find { it.getString("name") == QUERY_TEXT_INDEX } == null) {
             LOGGER.info("Creating $QUERY_TEXT_INDEX for $QUERIES_COLLECTION")
             this.queries.createIndex(Indexes.text(QUERY_TEXT), IndexOptions().name(QUERY_TEXT_INDEX))
+        }
+        if (this.queries.listIndexes().find { it.getString("name") == QUERY_BUCKET_INDEX } == null) {
+            LOGGER.info("Creating $QUERY_BUCKET_INDEX for $QUERIES_COLLECTION")
+            this.queries.createIndex(Indexes.ascending(BUCKET), IndexOptions().name(QUERY_BUCKET_INDEX))
         }
         if (this.userTweets.listIndexes().find { it.getString("name") == USER_ID_INDEX } == null) {
             LOGGER.info("Creating $USER_ID_INDEX - $BUCKET for $USER_TWEETS_COLLECTION")//
