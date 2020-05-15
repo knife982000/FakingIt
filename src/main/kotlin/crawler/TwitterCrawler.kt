@@ -16,6 +16,8 @@ import kotlin.system.exitProcess
 
 import edu.isistan.fakenews.scrapper.*
 import org.openqa.selenium.WebDriver
+import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
 
 var DEBUG_CRAWLER = false
 val LOGGER = LoggerFactory.getLogger(TwitterCrawler::class.java)
@@ -500,13 +502,22 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 		}		
 	}
 
-	private fun tweetReactionsDownload(tweetIds : List<Long>, what : String){
-
-		tweetIds.filter{this.storage.findReactions(it,what) == null}.forEach{
-			val reactions = getReactions(it.toString(),what)
-					//			if(reactions != null)
-					this.storage.storeTweetReactions(it,reactions,what) //here we could add all users to usersDownload
+	private fun tweetReactionsDownload(tweetIds : List<Long>, what : String, threads: Int=70){
+		val sem = Semaphore(threads);
+		val exec = Executors.newCachedThreadPool()
+		tweetIds.filter{!this.storage.isReactionsStored(it,what)}.forEach{
+			sem.acquire()
+			exec.submit {
+				try {
+					val reactions = getReactions(it.toString(), what)
+					this.storage.storeTweetReactions(it, reactions, what) //here we could add all users to usersDownload
+				} finally {
+				    sem.release()
+				}
+			}
 		}
+		sem.acquire(threads)
+		exec.shutdown()
 	}
 
 	private fun storeTweet(tweet: Status){
