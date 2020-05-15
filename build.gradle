@@ -48,3 +48,14 @@ jar {
    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
     
 }
+
+task otherJar(type: Jar) {
+    manifest {
+//        attributes 'Main-Class': 'edu.isistan.fakenews.FakeNewsCrawlerKt'
+      attributes 'Main-Class': 'storage.AccessStorageKt'
+    }
+    baseName 'AccessStorageKt'
+//    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } } //si dejás esta línea el jar resultante duplica el tamaño
+    with jar
+}
+
