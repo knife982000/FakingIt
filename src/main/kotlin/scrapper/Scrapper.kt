@@ -442,6 +442,25 @@ fun searchTweets(tweetTexts : MutableList<String>) : MutableList<Long>{
 	return tweetIds
 }
 
+fun getSearchedPotentialReplies(text : String, tweetId: Long, since: String, until: String) : List<Long>{
+	val tweets = mutableMapOf<Long,String>()
+	var urlText: String? = "https://mobile.twitter.com/search?q=(to:$text)(since:$since)(until:$until)"
+	while(urlText != null) {
+		val html = getURLContent(urlText,false)!!;
+		println(html)
+		val doc = Jsoup.parse(html)!!
+		tweets.putAll(parseSearch(doc))
+		val e = doc.getElementsByClass("w-button-more")
+		urlText = if (e.size > 0)
+			"https://mobile.twitter.com"+e.first().childNodes().get(1).attr("href")
+		else {
+			null
+		}
+	}
+	LOGGER.debug("Gotten search {} size: {}", text,tweets.size)
+	return tweets.keys.filter { it > tweetId }.toList()
+}
+
 
 fun main(){
 	

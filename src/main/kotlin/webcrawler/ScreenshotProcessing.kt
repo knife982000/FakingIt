@@ -19,7 +19,6 @@ import java.util.regex.Pattern
 import javax.imageio.ImageIO
 
 import edu.isistan.fakenews.storage.MongoDBStorage
-import edu.isistan.fakenews.storage.DEBUG_DB
 import edu.isistan.fakenews.storage.Tweet
 import org.bson.types.ObjectId
 import java.util.stream.Collector
@@ -52,7 +51,7 @@ fun processImage(image : BufferedImage, tweet : Tweet<ObjectId>) : BufferedImage
 
 //	Imgcodecs.imwrite("modified_grey.png", aux);
 	
-			Imgproc.threshold(aux,aux,254.0,255.0,Imgproc.THRESH_BINARY) //todo lo que está por fuera del recuadro queda negro.
+			Imgproc.threshold(aux,aux,254.0,255.0,Imgproc.THRESH_BINARY) //todo lo que estï¿½ por fuera del recuadro queda negro.
 
 //	Imgcodecs.imwrite("modified_bw.png", aux);
 	
@@ -98,7 +97,7 @@ fun processImage(image : BufferedImage, tweet : Tweet<ObjectId>) : BufferedImage
 	val thread = Mat(imgSource,rect)
 			Core.copyMakeBorder(thread, thread, 5, 5, 5, 5, Core.BORDER_CONSTANT, BLACK) //5
 
-			//	Imgcodecs.imwrite("modified_thread2.png", thread); //hasta acá me quedo solo con el sector de tweets
+			//	Imgcodecs.imwrite("modified_thread2.png", thread); //hasta acï¿½ me quedo solo con el sector de tweets
 //				Imgcodecs.imwrite("modified_rects.png", imgSource);
 //							Imgcodecs.imwrite("modified_bw.png", aux);
 
@@ -153,7 +152,7 @@ fun getTweetRectangle(image : BufferedImage) : BufferedImage{
 
 //	Imgcodecs.imwrite("modified_grey.png", aux);
 	
-			Imgproc.threshold(aux,aux,254.0,255.0,Imgproc.THRESH_BINARY) //todo lo que está por fuera del recuadro queda negro.
+			Imgproc.threshold(aux,aux,254.0,255.0,Imgproc.THRESH_BINARY) //todo lo que estï¿½ por fuera del recuadro queda negro.
 
 //	Imgcodecs.imwrite("modified_bw.png", aux);
 	
@@ -216,7 +215,7 @@ fun obfuscateImage(image : BufferedImage, tweet : Tweet<ObjectId>, screenname : 
 			val tessDataFolder = LoadLibs.extractTessResources("tessdata")
 			//Set the tessdata path
 			tesseract.setDatapath(tessDataFolder.getAbsolutePath())
-			tesseract.setHocr(true); //para que muestre más info del texto
+			tesseract.setHocr(true); //para que muestre mï¿½s info del texto
 
 	val bboxes = HashSet<Pair<MutableList<String>,Scalar>>()
 
@@ -296,7 +295,7 @@ private fun searchWords(tesseract : Tesseract, image : Mat,quoted : Boolean,twee
 					    val bbox_sp = getPosition(ww)
 						pos.add(bbox_sp);
 
-						if(word.startsWith("@") && word.replace("@","").length > 0) { //encontré algo que tengo que procesar!
+						if(word.startsWith("@") && word.replace("@","").length > 0) { //encontrï¿½ algo que tengo que procesar!
 							words_with_at++;
 							bboxes_line.add(Pair(bbox_sp,BLACK)) //petroleo
 							LOGGER.debug("Words starting with @ {} {}",word,bbox_sp)
@@ -353,7 +352,7 @@ private fun searchWords(tesseract : Tesseract, image : Mat,quoted : Boolean,twee
 
 						if(i < (line.size - 1) && line.get(i+1).trim().equals("-")){
 							for(k in 0 until i)
-								bboxes_line.add(Pair(pos.get(k),BLACK)) //bordó
+								bboxes_line.add(Pair(pos.get(k),BLACK)) //bordï¿½
 //							bboxes.addAll(pos.subList(0,i))
 						}
 							

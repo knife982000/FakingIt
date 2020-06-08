@@ -1,7 +1,6 @@
 package storage
 
 import edu.isistan.fakenews.storage.MongoDBStorage
-import edu.isistan.fakenews.storage.DEBUG_DB
 import javax.imageio.ImageIO
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -21,7 +20,10 @@ import java.time.ZoneId
 import java.time.LocalDate
 import edu.isistan.fakenews.crawler.TwitterCrawler
 
+import edu.isistan.fakenews.scrapper.*
+
 import edu.isistan.fakenews.*
+import edu.isistan.fakenews.storage.FAKE_NEWS_DB
 import edu.isistan.fakenews.storage.Query
 
 class AccessStorage
@@ -166,17 +168,33 @@ fun formQuery(storage : MongoDBStorage){
 
 fun main(args: Array<String>){
 	
-	DEBUG_DB = true
+	configure("properties_test.txt")
 	val storage = MongoDBStorage()
+	
+	println(storage.findAllQueryIds().asSequence().mapNotNull{it -> storage.findTweet(it)?.userId}.toList().toLongArray())
+	
+	
 
-//	configure("settings.properties")
+	
+//	val crawler = TwitterCrawler(storage) 
+//	
+//	val username = "alexleavitt"
+//	val id = "1232016593091084291"
+////	val replies = crawler.getReplies(username,id,true)	
+//	val replies = getReplies(username,id)
+//	println(replies)	
+//	replies.forEach{ tweet, pair ->
+//		println(tweet)
+//		pair.forEach{it -> println("-- ${it.text}")}
+//	}
+//	
+	
+//	configure(if (args[0] == "-r") args[1] else args[0])
+//	val storage = MongoDBStorage()
+//
+//	if(args[0] == "-r")
+//		formQuery(storage)
 
-	if(args[0] == "-r"){
-		formQuery(storage)
-		configure(args[1])
-	}
-	else
-		configure(args[0])
 
 //
 //	println(storage.tweets.find().filter{ it.userId < 0}.toList().size)
@@ -185,7 +203,7 @@ fun main(args: Array<String>){
 //
 //	configure("settings.properties")
 //
-	checkAndProcessTweets(storage)
+//	checkAndProcessTweets(storage)
 	
 //	checkInconsistencies("ids_teleton.txt",storage)
 

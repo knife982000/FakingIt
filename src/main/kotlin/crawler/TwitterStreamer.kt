@@ -3,8 +3,6 @@ package edu.isistan.fakenews.crawler
 import org.slf4j.LoggerFactory
 import edu.isistan.fakenews.storage.MongoDBStorage
 
-import edu.isistan.fakenews.storage.DEBUG_DB
-
 import twitter4j.*
 import java.lang.Thread.sleep
 import java.util.*
@@ -417,7 +415,6 @@ private class StorageHelper(
 
 fun main() {
 
-    DEBUG_DB = true
     val storage = MongoDBStorage()
 
     val streamer = TwitterStreamer(storage)
