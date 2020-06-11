@@ -36,7 +36,7 @@ fun Twitter.lookupUsers404(vararg ids: Long): List<User>{
 	try {
 		return this.lookupUsers(*ids)
 	} catch (e: TwitterException) {
-		
+
 		if (e.statusCode == HttpResponseCode.NOT_FOUND) {
 			LOGGER.warn("Users not found ${longArrayOf(*ids).contentToString()}")
 			return emptyList<User>()
@@ -49,7 +49,7 @@ fun Twitter.getFriendsList404(id: Long, cursor : Long): PagableResponseList<User
 	try {
 		return this.getFriendsList(id,cursor)
 	} catch (e: TwitterException) {
-		
+
 		if (e.statusCode == HttpResponseCode.NOT_FOUND) {
 			LOGGER.warn("User friends not found ${id}")
 			return null //TODO: Change to avoid returning null
@@ -62,7 +62,7 @@ fun Twitter.getFollowersList404(id: Long, cursor : Long): PagableResponseList<Us
 	try {
 		return this.getFriendsList(id,cursor)
 	} catch (e: TwitterException) {
-		
+
 		if (e.statusCode == HttpResponseCode.NOT_FOUND) {
 			LOGGER.warn("User followers not found ${id}")
 			return null //TODO: Change to avoid returning null
@@ -209,52 +209,52 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 		this.retryTwitterDownloadWrapper { this.twitterCrawl(tweetIds) }
 
 		val tweetIdsFiltered = tweetIds.filter{this.storage.findTweet(it) != null}
-		
+
 		val mistaken = retrieveMistakenTweets(tweetIdsFiltered.filter{this.storage.findTweet(it)!!.userId < 0}.toList())
-		mistaken.forEach{
+				mistaken.forEach{
 			if(it.user != null && it.user!!.id > 0)
 				this.storage.updateTweet(it)
 		}
-		
+
 		val missingUsers = mutableListOf<Long>()
-		tweetIdsFiltered.forEach{
+				tweetIdsFiltered.forEach{
 			val l = this.storage.findTweet(it)!!.userId
-			if(l > 0 && this.storage.findUser(l) == null)
+					if(l > 0 && this.storage.findUser(l) == null)
 						missingUsers.add(l)
 		}
 		if(missingUsers.size > 0)
 			usersCrawl(missingUsers.toLongArray(),false,false,false)
 
-		val tweetIdsFiltered2 = tweetIdsFiltered.filter{this.storage.findTweet(it)!!.userId > 0}.toList()
+			val tweetIdsFiltered2 = tweetIdsFiltered.filter{this.storage.findTweet(it)!!.userId > 0}.toList()
 
-		this.tweetReactionsDownload(tweetIdsFiltered2,"favorited") //scrapper
-		this.tweetReactionsDownload(tweetIdsFiltered2,"retweeted") //scrapper
+			this.tweetReactionsDownload(tweetIdsFiltered2,"favorited") //scrapper
+			this.tweetReactionsDownload(tweetIdsFiltered2,"retweeted") //scrapper
 
-		this.tweetReplyDownload(tweetIdsFiltered2,recursive) //scrapper
+			this.tweetReplyDownload(tweetIdsFiltered2,recursive) //scrapper
 
-		if(this.driver != null)	{
-			(this.driver as WebDriver).quit()
-			this.driver = null
-		}
-		//this.usersCrawlToDownload()
+			if(this.driver != null)	{
+				(this.driver as WebDriver).quit()
+				this.driver = null
+			}
+			//this.usersCrawlToDownload()
 	}
 
 	fun retrieveMistakenTweets(mistaken : List<Long>) : MutableList<Status> {
 		val retrieved = mutableListOf<Status>()
-		
-		mistaken.
-		chunked(99).map {
+
+				mistaken.
+				chunked(99).map {
 			it.toLongArray()
 		}.forEach {
 			retryTwitterDownloadWrapper {
 				LOGGER.info("Downloading tweets {}", it)
 				twitter.lookup(*it).forEach{retrieved.add(it)}
-				}
 			}
-			
+		}
+
 		return retrieved
 	}
-	
+
 	/**
 	 * Downloads the parents of the tweets in the list id
 	 * @param tweetIds tweet ids to download. They must be already downloaded
@@ -356,14 +356,14 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 
 	fun userCrawl(userId: Long, tweets: Boolean=true, followers: Boolean=true, followees: Boolean=true) {
 		LOGGER.info("Downloading User {}", userId)
-//		if (this.storage.findUser(userId) == null) {
-//			LOGGER.debug("User {} is not present. Downloading information.", userId)
-//			retryTwitterDownloadWrapper {
-//				twitter.lookupUsers404(userId).forEach {
-//					this.storage.storeUser(it)
-//				}
-//			}
-//		}
+		//		if (this.storage.findUser(userId) == null) {
+		//			LOGGER.debug("User {} is not present. Downloading information.", userId)
+		//			retryTwitterDownloadWrapper {
+		//				twitter.lookupUsers404(userId).forEach {
+		//					this.storage.storeUser(it)
+		//				}
+		//			}
+		//		}
 		if (tweets && !this.storage.userTweetsPresent(userId)) {
 			LOGGER.info("Downloading tweets for User {}", userId)
 			retryTwitterDownloadWrapper {
@@ -497,7 +497,6 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 	//for each tweet --> get replies, add all replies to tweetReplies, add replies ids to list
 	//call twitterCrawl al final para bajar los tweets de las respuestas.
 	//call tweetReplyDownload para armar la cadena de las cadenas
-	//despu�s ver c�mo reconstruir !!
 	private fun tweetReplyDownload(tweetIds : List<Long>,recursive : Boolean = false){
 		if (this.driver==null) {
 			this.driver = initFirefoxWithScrapperExtension()
@@ -506,7 +505,11 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 				tweetIds.filter{this.storage.findReplies(it) == null}.forEach{
 					val tweet = this.storage.findTweet(it)!!
 							val username = this.storage.findUser(tweet.userId)!!.screenName
-							val replies = getReplies(username,tweet.tweetId.toString(), driver)
+
+							var replies = getMobileReplies(username,tweet.tweetId.toString())
+
+							if(!replies.contains(-1) && !replies.isEmpty())
+								replies = getReplies(username,tweet.tweetId.toString(), driver)
 
 							this.storage.storeTweetReplies(it,replies)
 							newIds.addAll(replies)
@@ -538,64 +541,62 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 	private fun tweetReactionsDownload(tweetIds : List<Long>, what : String, threads: Int=70){
 		val sem = Semaphore(threads);
 		val exec = Executors.newCachedThreadPool()
-		tweetIds.filter{!this.storage.isReactionsStored(it,what)}.forEach{
-			sem.acquire()
-			exec.submit {
-				try {
-					val reactions = getReactions(it.toString(), what)
-					this.storage.storeTweetReactions(it, reactions, what) //here we could add all users to usersDownload
-				} finally {
-				    sem.release()
+				tweetIds.filter{!this.storage.isReactionsStored(it,what)}.forEach{
+					sem.acquire()
+					exec.submit {
+						try {
+							val reactions = getReactions(it.toString(), what)
+									this.storage.storeTweetReactions(it, reactions, what) //here we could add all users to usersDownload
+						} finally {
+							sem.release()
+						}
+					}
 				}
-			}
-		}
-		sem.acquire(threads)
-		exec.shutdown()
+				sem.acquire(threads)
+				exec.shutdown()
 	}
 
-
-	//TODO: Change first call to mobile
 	fun getReplies(username: String, tweetId: Long, recursive: Boolean=true, maxDays: Long = 4): Map<Long, List<Tweet<ObjectId>>> {
 		val result = mutableMapOf<Long, List<Tweet<ObjectId>>>()
-		var baseTweet = storage.findTweet(tweetId)
-		if (baseTweet == null) {
-			this.twitterCrawl(listOf(tweetId))
-			baseTweet = storage.findTweet(tweetId)
-			if (baseTweet == null) {
-				LOGGER.error("Tweet unavailable.")
-				return emptyMap()
-			}
-		}
-		val date = baseTweet.created.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
-		val since = date.minusDays(1).toString()
-		val until = date.plusDays(maxDays).toString()
-
-		var candidates = getSearchedPotentialReplies(username, tweetId, since, until)
-		val replies = mutableListOf<Tweet<ObjectId>>()
-		//Como los tengo que bajar de todas maneras, los bajo y guardo
-		this.twitterCrawl(candidates)
-		//Proceso los tweets que ya tengo
-		candidates.forEach {
-			val tweet = storage.findTweet(it)
-			if (tweet!=null) {
-				if (tweet.inReplyToStatusId == tweetId) {
-					replies.add(tweet)
+				var baseTweet = storage.findTweet(tweetId)
+				if (baseTweet == null) {
+					this.twitterCrawl(listOf(tweetId))
+					baseTweet = storage.findTweet(tweetId)
+					if (baseTweet == null) {
+						LOGGER.error("Tweet unavailable.")
+						return emptyMap()
+					}
 				}
-			} else {
-				LOGGER.warn("Missing tweet: {}", it)
-			}
+		val date = baseTweet.created.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
+				val since = date.minusDays(1).toString()
+				val until = date.plusDays(maxDays).toString()
+
+				var candidates = getSearchedPotentialReplies(username, tweetId, since, until)
+				val replies = mutableListOf<Tweet<ObjectId>>()
+				//Como los tengo que bajar de todas maneras, los bajo y guardo
+				this.twitterCrawl(candidates)
+				//Proceso los tweets que ya tengo
+				candidates.forEach {
+			val tweet = storage.findTweet(it)
+					if (tweet!=null) {
+						if (tweet.inReplyToStatusId == tweetId) {
+							replies.add(tweet)
+						}
+					} else {
+						LOGGER.warn("Missing tweet: {}", it)
+					}
 		}
-//		result[tweetId] = baseTweet!! to replies
+
 		result[tweetId] = replies
-		if (recursive) {
-			replies.map {
-				it to storage.findUser(it.userId)
-			}.filter {
-				it.second != null
-			}.forEach {
-				result.putAll(this.getReplies(it.second!!.screenName, it.first.tweetId))
-			}
-		}
+				if (recursive) {
+					replies.map {
+						it to storage.findUser(it.userId)
+					}.filter {
+						it.second != null
+					}.forEach {
+						result.putAll(this.getReplies(it.second!!.screenName, it.first.tweetId))
+					}
+				}
 		return result
 	}
 

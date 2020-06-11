@@ -55,7 +55,8 @@ fun main(args: Array<String>) {
 	//	val args1 = arrayOf("-st","C:\\Users\\Anto\\Desktop\\twitter-hate\\ids_to_download.txt")
 	//	val args1 = arrayOf("-track","-conf","settings_covid.properties")
 	//"ids_test_replies.txt"
-//	val args1 = arrayOf("-ut","-conf","properties_test.txt")
+//	val args1 = arrayOf("-t","ids_test_replies.txt","-conf","properties_test.txt")
+//	val args1 = arrayOf("-t","D:\\out-FakeNewsTest\\tweets-ids.txt","-conf","properties_test.txt")
 
 			val options = Options()
 			val groups = OptionGroup()
@@ -192,7 +193,7 @@ fun main(args: Array<String>) {
 
 			val parser: CommandLineParser = DefaultParser()
 			try { // parse the command line arguments
-				val line = parser.parse(options, args) 
+				val line = parser.parse(options, args) //TODO 
 
 						//		NAME_DB = line.getOptionValue("ddb", "FakeNewsTest")
 						//		FAKE_NEWS_DB = line.getOptionValue("ddb.name", "FakeNewsTest")
@@ -356,12 +357,8 @@ fun downloadUsers() {
 	val tweetCrawler = TwitterCrawler(storage)
 
 	val usersArray = storage.findUsersDownload().filter { it > 0} //To avoid problems with invalid users
-	tweetCrawler.usersCrawl(
-			usersArray.toLongArray(),
-			true,
-			false,
-			false
-			) //in case we are missing any user information from before!
+	tweetCrawler.usersCrawl(usersArray.toLongArray(),false,false,false) //in case we are missing any user information from before!
+	
 	usersArray.filter { storage.findUser(it) != null }.forEach {
 		storage.removeUserDownload(it) //we remove those users we effectively downloaded
 	}

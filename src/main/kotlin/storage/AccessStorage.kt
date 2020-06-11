@@ -21,10 +21,15 @@ import java.time.LocalDate
 import edu.isistan.fakenews.crawler.TwitterCrawler
 
 import edu.isistan.fakenews.scrapper.*
+import edu.isistan.fakenews.storage.Tweet
 
 import edu.isistan.fakenews.*
 import edu.isistan.fakenews.storage.FAKE_NEWS_DB
 import edu.isistan.fakenews.storage.Query
+import java.util.Arrays
+import com.mongodb.client.model.Accumulators
+import com.mongodb.client.model.Sorts
+import com.mongodb.client.model.Aggregates
 
 class AccessStorage
 
@@ -126,86 +131,152 @@ fun checkInconsistencies(path : String, storage : MongoDBStorage){
 			}
 
 			val writer = Files.newBufferedWriter(File("missing_tweets.txt").toPath());
-//			tweetIds.filter{storage.findTweet(it) == null}.forEach{
-//
-//				writer.write(it.toString())
-//				writer.newLine()	
-//
-//			}
-	
+			//			tweetIds.filter{storage.findTweet(it) == null}.forEach{
+			//
+			//				writer.write(it.toString())
+			//				writer.newLine()	
+			//
+			//			}
+
 			tweetIds.forEach{
 				val tweet = storage.findTweet(it)
-				if(tweet != null)
-					if (storage.findUser(tweet.userId) == null){
-						writer.write(it.toString())
-						writer.newLine()	
-					}
+						if(tweet != null)
+							if (storage.findUser(tweet.userId) == null){
+								writer.write(it.toString())
+								writer.newLine()	
+							}
 			}
-	
+
 			writer.close()
 }
 
 //a las XX hs de bajado un tweet analizar las reacciones, como para dar tiempo a que se genere algo...
 fun checkAndProcessTweets(storage : MongoDBStorage){
-	
+
 	val tweetCrawler = TwitterCrawler(storage)
 
-	while(storage.queries.find().flatMap{it.tweetIds}.asSequence().find{storage.findReplies(it) == null} != null) {
-		storage.tweets.find(Filters.lt("created",LocalDateTime.now().minusHours(7))).asSequence().map{it.tweetId}.chunked(10000).forEach{
-			tweetCrawler.run(it)
-		}
-	}
+			while(storage.queries.find().flatMap{it.tweetIds}.asSequence().find{storage.findReplies(it) == null} != null) {
+				storage.tweets.find(Filters.lt("created",LocalDateTime.now().minusHours(7))).asSequence().map{it.tweetId}.chunked(10000).forEach{
+					tweetCrawler.run(it)
+				}
+			}
 
-//		storage.tweets.find(Filters.lt("created",LocalDateTime.now().minusHours(7))).asSequence().map{it.tweetId}.chunked(3).forEach{
-//			tweetCrawler.run(it)
-//		}
+	//		storage.tweets.find(Filters.lt("created",LocalDateTime.now().minusHours(7))).asSequence().map{it.tweetId}.chunked(3).forEach{
+	//			tweetCrawler.run(it)
+	//		}
 }
-	
+
 fun formQuery(storage : MongoDBStorage){
 	val query = "FilterQuery{count=0, follow=[33989170, 144929758, 149991703, 4515126989, 69416519, 8105922, 54414081, 2953955753, 37494271, 35776604, 171650522, 152325528], track=[quedateencasa,  covid,  covid-19,  casa rosada,  cuarentena,  pami,  barbijo,  mÃ¡scara,  salud,  coronavirus,  solidaridad,  impuesto,  argentina,  caso,  muert,  infectado,  infectada,  test,  testeo,  testeomasivo,  tapaboca,  mÃ©dico,  enfermera,  viruschino,  virus,  virus chino,  jubilado,  pandemia,  mayorescuidados,  tapatelaboca,  cuidarteescuidarnos,  desarrollo social,  cancilleria argentina,  argentinaunida,  deuda], locations=null, language=[es], filter_level=null}\n"
-	storage.findOrStoreQuery(query,storage.tweets.find().map{it.tweetId}.toMutableList())
+			storage.findOrStoreQuery(query,storage.tweets.find().map{it.tweetId}.toMutableList())
+}
+
+fun downloadUserCumulative(storage : MongoDBStorage, perc : Long){
+		val result = storage.tweets.aggregate(Arrays.asList(
+					Aggregates.group("$"+"userId", Accumulators.sum("count", 1)),
+					Aggregates.sort(Sorts.descending("count"))), Document::class.java).allowDiskUse(true).filter{it.getLong("_id") > 0}
+	
+	val total = result.sumBy { it.getInteger("count") } * perc//el acumulado para los que quiero bajar...
+	
+	var sum = 0
+	val toDownload = mutableSetOf<Long>()
+	toDownload.add(result.first().getLong("_id"))
+	result.forEach{
+		sum += it.getInteger("count")
+		if(sum < total)
+			toDownload.add(it.getLong("_id"))
+	}
+	
+	//TODO: Ac� se pueden descargar los usuarios
+	println(toDownload)
+}
+
+//load ids from file and call userDownload with them
+fun downloadUsers(storage : MongoDBStorage, filename : String){
+		val file = File(filename)
+		val users = ArrayList<Long>()
+			file.readLines().map { it.trim() }.filter { it.isNotEmpty() }.forEach {
+				val sp = it.split(",")
+				if(sp[1].toInt() >= 1000)
+					users.add(sp[0].toLong())
+			}
+			println(users)
+	val crawler = TwitterCrawler(storage)
+	
+	users.reverse()
+	crawler.usersCrawl(users.toLongArray(),false,true,true)
+}
+
+//check which users are incomplete and redownload the data
+fun checkUsers(storage : MongoDBStorage){
+	
+	val users_to_fix = mutableSetOf<Long>()
+	
+	storage.users.find(Filters.exists("verified", false) ).iterator().forEach{
+		users_to_fix.add(it.userId)
+	}
+	
+	println(users_to_fix.size)
+	
 }
 
 fun main(args: Array<String>){
-	
-	configure("properties_test.txt")
+
+	configure("settings.txt")
 	val storage = MongoDBStorage()
-	
-	println(storage.findAllQueryIds().asSequence().mapNotNull{it -> storage.findTweet(it)?.userId}.toList().toLongArray())
-	
-	
 
+	//add all userIds from users to usersDownload to force download with the new data
+	//	storage.users.find().asSequence().forEach {
+	//		storage.storeUserDownload(it.userId)
+	//	};
 	
-//	val crawler = TwitterCrawler(storage) 
+//	checkUsers(storage)
+	downloadUsers(storage,"users_count.txt")
+//	val result = storage.tweets.aggregate(Arrays.asList(
+//					Aggregates.group("$"+"userId", Accumulators.sum("count", 1)),
+//					Aggregates.sort(Sorts.descending("count"))), Document::class.java).allowDiskUse(true)
 //	
-//	val username = "alexleavitt"
-//	val id = "1232016593091084291"
-////	val replies = crawler.getReplies(username,id,true)	
-//	val replies = getReplies(username,id)
-//	println(replies)	
-//	replies.forEach{ tweet, pair ->
-//		println(tweet)
-//		pair.forEach{it -> println("-- ${it.text}")}
-//	}
-//	
-	
-//	configure(if (args[0] == "-r") args[1] else args[0])
-//	val storage = MongoDBStorage()
-//
-//	if(args[0] == "-r")
-//		formQuery(storage)
+//	val writer = Files.newBufferedWriter(File("users_count.txt").toPath());
+//	result.forEach{
+//		writer.write("${it.get("_id")},${it.get("count")}")
+//		writer.newLine()
+//	}		
+//	writer.close()
+
+	//	storage.users.find().iterator().forEachRemaining{
+	//		storage.userDownloads.insertOne()
+	//	}
+
+	//	val crawler = TwitterCrawler(storage) 
+	//	
+	//	val username = "alexleavitt"
+	//	val id = "1232016593091084291"
+	////	val replies = crawler.getReplies(username,id,true)	
+	//	val replies = getReplies(username,id)
+	//	println(replies)	
+	//	replies.forEach{ tweet, pair ->
+	//		println(tweet)
+	//		pair.forEach{it -> println("-- ${it.text}")}
+	//	}
+	//	
+
+	//	configure(if (args[0] == "-r") args[1] else args[0])
+	//	val storage = MongoDBStorage()
+	//
+	//	if(args[0] == "-r")
+	//		formQuery(storage)
 
 
-//
-//	println(storage.tweets.find().filter{ it.userId < 0}.toList().size)
-//
+	//
+	//	println(storage.tweets.find().filter{ it.userId < 0}.toList().size)
+	//
 
-//
-//	configure("settings.properties")
-//
-//	checkAndProcessTweets(storage)
-	
-//	checkInconsistencies("ids_teleton.txt",storage)
+	//
+	//	configure("settings.properties")
+	//
+	//	checkAndProcessTweets(storage)
+
+	//	checkInconsistencies("ids_teleton.txt",storage)
 
 	storage.close()
 }

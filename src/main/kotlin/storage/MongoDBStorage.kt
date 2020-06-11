@@ -173,7 +173,9 @@ fun twitter4j.User.toStorage(): User<ObjectId> {
         this.miniProfileImageURL, this.originalProfileImageURL, this.get400x400ProfileImageURL(),
         this.profileImageURLHttps, this.biggerProfileImageURLHttps, this.miniProfileImageURLHttps,
         this.originalProfileImageURLHttps, this.get400x400ProfileImageURLHttps(), this.isDefaultProfileImage,
-        this.url, this.isProtected, this.followersCount, this.status?.id
+        this.url, this.isProtected, this.followersCount, this.status?.id,
+        this.favouritesCount,this.friendsCount,this.lang,this.listedCount,this.statusesCount,
+        this.timeZone,this.getUtcOffset(),this.isGeoEnabled(),this.isVerified()
     )
 }
 

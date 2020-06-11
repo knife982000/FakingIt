@@ -36,7 +36,8 @@ const val _TWEET = "#TWEET"
 const val _POS = "#POS"
 const val _WHAT = "retweeted"
 
-const val replies_base_path = "https://twitter.com/${_USER}/status/${_TWEET}" 
+const val replies_base_path = "https://twitter.com/${_USER}/status/${_TWEET}"
+const val replies_mobile_base_path = "https://mobile.twitter.com/${_USER}/status/${_TWEET}" 
 const val replies_path = "https://twitter.com/i/${_USER}/conversation/${_TWEET}?include_available_features=1&include_entities=1&max_position=${_POS}&&reset_error_state=false"
 
 const val reactions_base_path = "https://twitter.com/i/activity/${_WHAT}_popup?id=${_TWEET}"
@@ -231,6 +232,41 @@ private fun parseReplies(doc : Document) : List<Long> {
 	return reps;
 }
 
+public fun getMobileReplies(screenname : String, tweetId : String) : List<Long>{
+	val replies = mutableListOf<Long>()
+	LOGGER.debug("Processing replies {} {}",screenname, tweetId)
+	
+	val url = replies_mobile_base_path.replace("#USER", screenname).replace("#TWEET",tweetId);
+	val content = getURLContent(url,false)
+
+	val doc = Jsoup.parse(content)
+
+	doc.getElementsByClass("tweet-container").forEach{
+		it.getElementsByClass("tweet-reply-context username").forEach{
+			it.getAllElements().forEach{it.toString().lines().filter{it.contains("status")}.forEach{
+//				println(it)
+				val sp = it.split("/")
+				replies.add(sp[3].toLong());//,sp[1])
+			}
+		}
+	}
+	}
+	
+	if(!replies.isEmpty())
+		replies.add(-1L);
+	
+	if(replies.isEmpty())
+			doc.getElementsByClass("meta-and-actions").forEach{
+		it.getElementsByClass("metadata").forEach{
+				val sp = it.getElementsByTag("a").first().attr("href").split("/")
+				replies.add(sp[3].replace("?p=v","").toLong());//,sp[1])
+		}
+	}
+	
+	LOGGER.debug("Obtained replies {}",replies)
+	return replies;
+}
+
 private fun getURLContent(url : String,enable_javascript : Boolean = true) : String?{
 
 	LOGGER.debug("URL: {}",url)
@@ -268,10 +304,6 @@ private fun getURLContent(url : String,enable_javascript : Boolean = true) : Str
 			else{
 				LOGGER.error("ERROR: {}",e.toString());
 				checkInternetAvailability()
-//				while(!checkInternetAvailability()){
-//					LOGGER.error("ERROR: No internet ... waiting");
-//					Thread.sleep(2000)
-//				}
 
 			}
 							
@@ -469,11 +501,25 @@ fun main(){
 	configure("settings.properties")
 	
 		val screenname = "OfeFernandez_"
-	val tweet_id = "1210306953936855043"
-	//	val tweet_id = "1247027648720756736"
-		val list = getReplies(screenname,tweet_id)
-	println(list)
+		val tweet_id = "1270441683126288385"
 
+//	val screenname = "tommantonela89"
+//	val tweet_id = 1200096974541856776L
+
+//	val br =  BufferedReader(InputStreamReader(FileInputStream("html.txt")))
+//	val content = br.lines().collect(Collectors.joining())
+//	val doc = Jsoup.parse(content)
+//	doc.getElementsByClass("meta-and-actions").forEach{
+//		it.getElementsByClass("metadata").forEach{
+//				val sp = it.getElementsByTag("a").first().attr("href").split("/")
+//				replies.put(sp[3].toLong(),sp[1])
+//		}
+//	}
+	
+//		val list = getReplies(screenname,tweet_id
+	val list = getMobileReplies(screenname,tweet_id)
+	print(list)
+	
 //	var list = getReactions(tweet_id,"retweeted")
 //	println(list);
 //

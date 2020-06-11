@@ -129,7 +129,17 @@ data class User<T>(var id: T?=null,
                    var url: String?=null,
                    var protected: Boolean=false,
                    var followerCount: Int=0,
-                   var status: Long?=null)
+                   var status: Long?=null,
+				   var favoritesCount: Int=0,
+				   var friendsCount: Int=0,
+				   var lang: String? = null,
+				   var listedCount: Int=0,
+				   var statusesCount: Int=0,
+				   var timeZone: String?=null,
+				   var offset: Int=0,
+				   var geoEnabled: Boolean=false,
+				   var verified: Boolean=false	   
+)
 
 /**
  * Place
@@ -141,7 +151,7 @@ data class Place<T>(var id: T?=null,
                     var name: String="",
                     var fullName: String="",
                     var country: String="",
-                    var boundingBox: BoundingBox,
+                    var boundingBox: BoundingBox=BoundingBox(),
                     var within: MutableList<String>?=null)
 
 /**
