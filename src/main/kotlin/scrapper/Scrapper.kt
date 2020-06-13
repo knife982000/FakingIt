@@ -237,10 +237,14 @@ public fun getMobileReplies(screenname : String, tweetId : String) : List<Long>{
 	LOGGER.debug("Processing replies {} {}",screenname, tweetId)
 	
 	val url = replies_mobile_base_path.replace("#USER", screenname).replace("#TWEET",tweetId);
-	val content = getURLContent(url,false)
+	//Access the content or fails if the url is not present
+	val content = getURLContent(url,false) ?: return emptyList()
 
 	val doc = Jsoup.parse(content)
-
+	//This case the tweet does not exist and twitter redirects to search page
+	if (doc.getElementsByTag("title").text().endsWith("$screenname) on Twitter")) {
+		return emptyList()
+	}
 	doc.getElementsByClass("tweet-container").forEach{
 		it.getElementsByClass("tweet-reply-context username").forEach{
 			it.getAllElements().forEach{it.toString().lines().filter{it.contains("status")}.forEach{
