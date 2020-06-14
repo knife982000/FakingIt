@@ -64,6 +64,7 @@ private fun getFreePort(): Int {
 }
 
 private class ReadMessages(val iis: InputStream, val callback: (String)->Unit): Runnable {
+    var exception: Exception? = null
     override fun run() {
         val bytes = ByteArray(1024)
         var first = true
@@ -81,7 +82,11 @@ private class ReadMessages(val iis: InputStream, val callback: (String)->Unit): 
                     sep = msg.indexOf(':')
                     size = msg.substring(0 until sep).toInt()
                     if ((msg.length - sep - 1) == size) {
-                        this.callback(msg)
+                        try {
+                            this.callback(msg)
+                        } catch (e: Exception) {
+                            this.exception = e
+                        }
                     } else {
                         first = false
                         sb.append(msg)
@@ -98,6 +103,11 @@ private class ReadMessages(val iis: InputStream, val callback: (String)->Unit): 
             }
         }
     }
+
+    fun throwException() {
+        if (exception != null)
+            throw Exception(exception!!)
+    }
 }
 
 
@@ -109,34 +119,42 @@ private fun loadExtension(path: String, port: Int) {
     val oos = socket.getOutputStream()
 
     var msg = 0
-    var target = ""
-    Thread(ReadMessages(iis) {
+    var target: String
+    val reader = ReadMessages(iis) {
         msg++
         //println(it)
         when (msg) {
             1 -> {
-                oos.write("31:{\"to\":\"root\",\"type\":\"listTabs\"}".toByteArray())
+                oos.write("33:{\"to\":\"root\",\"type\":\"listAddons\"}".toByteArray())
                 oos.flush()
             }
             2 -> {
-                val gson = Gson()
-                val sep = it.indexOf(":")
-                target = gson.fromJson(it.substring(sep + 1), Map::class.java)["addonsActor"] as String
-                LOGGER.debug("Firefox addon actor: {}", target)
-                //println("Actor is: $target")
-                val payloadMap =
-                    mapOf<String, String>("to" to target, "type" to "installTemporaryAddon", "addonPath" to path)
-                var payload = gson.toJson(payloadMap)
-                oos.write("${payload.length}:$payload".toByteArray())
-                oos.flush()
-                Thread.sleep(1000)
-                socket.close()
-                ready.release()
+                try {
+                    val gson = Gson()
+                    val sep = it.indexOf(":")
+                    println(it)
+                    @Suppress("UNCHECKED_CAST") val parsed = gson.fromJson(it.substring(sep + 1), Map::class.java)["addons"] as List<Map<String, String>>
+                    target = parsed[0]["actor"] ?: error("Addon Actor unavailable")
+                    LOGGER.debug("Firefox addon actor: {}", target)
+                    val payloadMap =
+                        mapOf("to" to target, "type" to "installTemporaryAddon", "addonPath" to path)
+                    val payload = gson.toJson(payloadMap)
+                    oos.write("${payload.length}:$payload".toByteArray())
+                    oos.flush()
+                    Thread.sleep(1000)
+                    socket.close()
+                } catch (e: Exception) {
+                    throw e
+                } finally {
+                    ready.release()
+                }
             }
         }
-    }).start()
+    }
 
+    Thread(reader).start()
     ready.acquire()
+    reader.throwException()
 }
 
 
