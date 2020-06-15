@@ -125,16 +125,15 @@ private fun loadExtension(path: String, port: Int) {
         //println(it)
         when (msg) {
             1 -> {
-                oos.write("33:{\"to\":\"root\",\"type\":\"listAddons\"}".toByteArray())
+                oos.write("30:{\"to\":\"root\",\"type\":\"getRoot\"}".toByteArray())
                 oos.flush()
             }
             2 -> {
                 try {
                     val gson = Gson()
                     val sep = it.indexOf(":")
-                    println(it)
-                    @Suppress("UNCHECKED_CAST") val parsed = gson.fromJson(it.substring(sep + 1), Map::class.java)["addons"] as List<Map<String, String>>
-                    target = parsed[0]["actor"] ?: error("Addon Actor unavailable")
+                    @Suppress("UNCHECKED_CAST") val parsed = gson.fromJson(it.substring(sep + 1), Map::class.java) as Map<String, String>
+                    target = parsed["addonsActor"] ?: error("Addon Actor unavailable")
                     LOGGER.debug("Firefox addon actor: {}", target)
                     val payloadMap =
                         mapOf("to" to target, "type" to "installTemporaryAddon", "addonPath" to path)
