@@ -19,11 +19,13 @@ import org.bson.codecs.pojo.ClassModel
 import org.bson.codecs.pojo.PojoCodecProvider
 import org.bson.codecs.pojo.PropertyModelBuilder
 import org.bson.types.ObjectId
-import org.slf4j.LoggerFactory
 import twitter4j.Status
 import java.io.Closeable
 import java.util.stream.Collectors
 import kotlin.math.min
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.LoggerContext;
+import org.slf4j.LoggerFactory;
 
 
 val FAKE_NEWS_DB: String by lazy {System.getProperty("ddb.name", "FakeNewsTest")}
@@ -258,6 +260,10 @@ class MongoDBStorage : AutoCloseable, Closeable {
         twitterIndexes()
         downloadIndexes()
         webContentIndexes()
+		
+//		val loggerContext = LoggerFactory.getILoggerFactory();
+//        val rootLogger = (loggerContext as LoggerContext).getLogger("org.mongodb.driver");
+//        rootLogger.setLevel(Level.OFF);	
     }
 
     fun storeUser(user: twitter4j.User): Boolean {

@@ -227,9 +227,12 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 
 			val tweetIdsFiltered2 = tweetIdsFiltered.filter{this.storage.findTweet(it)!!.userId > 0}.toList()
 
-			this.tweetReactionsDownload(tweetIdsFiltered2,"favorited") //scrapper
-			this.tweetReactionsDownload(tweetIdsFiltered2,"retweeted") //scrapper
+//			this.tweetReactionsDownload(tweetIdsFiltered2,"favorited") //scrapper
+//			this.tweetReactionsDownload(tweetIdsFiltered2,"retweeted") //scrapper
 
+//		this.tweetReactionsDownload(tweetIds,"favorited") //scrapper
+//			this.tweetReactionsDownload(tweetIds,"retweeted") //scrapper
+		
 			this.tweetReplyDownload(tweetIdsFiltered2,recursive) //scrapper
 
 			if(this.driver != null)	{
@@ -508,9 +511,9 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 
 							var replies = getMobileReplies(username,tweet.tweetId.toString())
 
-							if(!replies.contains(-1) && !replies.isEmpty())
+							if(!replies.remove(-1L) && replies.size > 9)
 								replies = getReplies(username,tweet.tweetId.toString(), driver)
-
+													
 							this.storage.storeTweetReplies(it,replies)
 							newIds.addAll(replies)
 				}
@@ -539,21 +542,21 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 	}
 
 	private fun tweetReactionsDownload(tweetIds : List<Long>, what : String, threads: Int=70){
-		val sem = Semaphore(threads);
-		val exec = Executors.newCachedThreadPool()
+//		val sem = Semaphore(threads);
+//		val exec = Executors.newCachedThreadPool()
 				tweetIds.filter{!this.storage.isReactionsStored(it,what)}.forEach{
-					sem.acquire()
-					exec.submit {
-						try {
+//					sem.acquire()
+//					exec.submit {
+//						try {
 							val reactions = getReactions(it.toString(), what)
 									this.storage.storeTweetReactions(it, reactions, what) //here we could add all users to usersDownload
-						} finally {
-							sem.release()
-						}
-					}
+//						} finally {
+//							sem.release()
+//						}
+//					}
 				}
-				sem.acquire(threads)
-				exec.shutdown()
+//				sem.acquire(threads)
+//				exec.shutdown()
 	}
 
 	fun getReplies(username: String, tweetId: Long, recursive: Boolean=true, maxDays: Long = 4): Map<Long, List<Tweet<ObjectId>>> {

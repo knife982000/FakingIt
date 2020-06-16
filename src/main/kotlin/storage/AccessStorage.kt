@@ -155,7 +155,8 @@ fun checkAndProcessTweets(storage : MongoDBStorage){
 
 	val tweetCrawler = TwitterCrawler(storage)
 
-			while(storage.queries.find().flatMap{it.tweetIds}.asSequence().find{storage.findReplies(it) == null} != null) {
+			while(Sequence { storage.queries.find().iterator() }.
+					flatMap{it.tweetIds.asSequence() }.find{storage.findReplies(it) == null} != null) {
 				storage.tweets.find(Filters.lt("created",LocalDateTime.now().minusHours(7))).asSequence().map{it.tweetId}.chunked(10000).forEach{
 					tweetCrawler.run(it)
 				}
@@ -172,76 +173,77 @@ fun formQuery(storage : MongoDBStorage){
 }
 
 fun downloadUserCumulative(storage : MongoDBStorage, perc : Long){
-		val result = storage.tweets.aggregate(Arrays.asList(
-					Aggregates.group("$"+"userId", Accumulators.sum("count", 1)),
-					Aggregates.sort(Sorts.descending("count"))), Document::class.java).allowDiskUse(true).filter{it.getLong("_id") > 0}
-	
+	val result = storage.tweets.aggregate(Arrays.asList(
+			Aggregates.group("$"+"userId", Accumulators.sum("count", 1)),
+			Aggregates.sort(Sorts.descending("count"))), Document::class.java).allowDiskUse(true).filter{it.getLong("_id") > 0}
+
 	val total = result.sumBy { it.getInteger("count") } * perc//el acumulado para los que quiero bajar...
-	
-	var sum = 0
-	val toDownload = mutableSetOf<Long>()
-	toDownload.add(result.first().getLong("_id"))
-	result.forEach{
+
+			var sum = 0
+			val toDownload = mutableSetOf<Long>()
+			toDownload.add(result.first().getLong("_id"))
+			result.forEach{
 		sum += it.getInteger("count")
-		if(sum < total)
-			toDownload.add(it.getLong("_id"))
+				if(sum < total)
+					toDownload.add(it.getLong("_id"))
 	}
-	
+
 	//TODO: Acá se pueden descargar los usuarios
 	println(toDownload)
 }
 
 //load ids from file and call userDownload with them
 fun downloadUsers(storage : MongoDBStorage, filename : String){
-		val file = File(filename)
-		val users = ArrayList<Long>()
+	val file = File(filename)
+			val users = ArrayList<Long>()
 			file.readLines().map { it.trim() }.filter { it.isNotEmpty() }.forEach {
 				val sp = it.split(",")
-				if(sp[1].toInt() >= 1000)
-					users.add(sp[0].toLong())
+						if(sp[1].toInt() >= 1000)
+							users.add(sp[0].toLong())
 			}
 			println(users)
-	val crawler = TwitterCrawler(storage)
-	
-	users.reverse()
-	crawler.usersCrawl(users.toLongArray(),false,true,true)
+			val crawler = TwitterCrawler(storage)
+
+			users.reverse()
+			crawler.usersCrawl(users.toLongArray(),false,true,true)
 }
 
 //check which users are incomplete and redownload the data
 fun checkUsers(storage : MongoDBStorage){
-	
+
 	val users_to_fix = mutableSetOf<Long>()
-	
-	storage.users.find(Filters.exists("verified", false) ).iterator().forEach{
+
+			storage.users.find(Filters.exists("verified", false) ).iterator().forEach{
 		users_to_fix.add(it.userId)
 	}
-	
+
 	println(users_to_fix.size)
-	
+
 }
 
 fun main(args: Array<String>){
 
-	configure("settings.txt")
+//	configure("settings.txt")
+	configure(args[0])
 	val storage = MongoDBStorage()
 
 	//add all userIds from users to usersDownload to force download with the new data
 	//	storage.users.find().asSequence().forEach {
 	//		storage.storeUserDownload(it.userId)
 	//	};
-	
-//	checkUsers(storage)
-	downloadUsers(storage,"users_count.txt")
-//	val result = storage.tweets.aggregate(Arrays.asList(
-//					Aggregates.group("$"+"userId", Accumulators.sum("count", 1)),
-//					Aggregates.sort(Sorts.descending("count"))), Document::class.java).allowDiskUse(true)
-//	
-//	val writer = Files.newBufferedWriter(File("users_count.txt").toPath());
-//	result.forEach{
-//		writer.write("${it.get("_id")},${it.get("count")}")
-//		writer.newLine()
-//	}		
-//	writer.close()
+
+	//	checkUsers(storage)
+	//	downloadUsers(storage,"users_count.txt")
+	//	val result = storage.tweets.aggregate(Arrays.asList(
+	//					Aggregates.group("$"+"userId", Accumulators.sum("count", 1)),
+	//					Aggregates.sort(Sorts.descending("count"))), Document::class.java).allowDiskUse(true)
+	//	
+	//	val writer = Files.newBufferedWriter(File("users_count.txt").toPath());
+	//	result.forEach{
+	//		writer.write("${it.get("_id")},${it.get("count")}")
+	//		writer.newLine()
+	//	}		
+	//	writer.close()
 
 	//	storage.users.find().iterator().forEachRemaining{
 	//		storage.userDownloads.insertOne()
@@ -274,7 +276,7 @@ fun main(args: Array<String>){
 	//
 	//	configure("settings.properties")
 	//
-	//	checkAndProcessTweets(storage)
+		checkAndProcessTweets(storage)
 
 	//	checkInconsistencies("ids_teleton.txt",storage)
 

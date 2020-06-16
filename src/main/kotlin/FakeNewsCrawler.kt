@@ -19,6 +19,9 @@ import kotlin.system.exitProcess
 import edu.isistan.fakenews.webcrawler.TwitterObfuscatedScreenshotCrawler
 import org.bson.types.ObjectId
 import java.util.stream.Collectors
+import org.apache.log4j.LogManager
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.LoggerContext
 
 
 private class FakeNewsCrawler
@@ -49,14 +52,16 @@ fun main(args: Array<String>) {
 
 	//Add option for getting news from specific sources
 
-	//Conversation threads with mobile search of sub conversations 
-
-
+	
+//	val loggerContext = LoggerFactory.getILoggerFactory();
+//    val rootLogger = (loggerContext as LoggerContext).getLogger("org.mongodb.driver");
+//    rootLogger.setLevel(Level.INFO);	
+	
 	//	val args1 = arrayOf("-st","C:\\Users\\Anto\\Desktop\\twitter-hate\\ids_to_download.txt")
 	//	val args1 = arrayOf("-track","-conf","settings_covid.properties")
 	//"ids_test_replies.txt"
 //	val args1 = arrayOf("-t","ids_test_replies.txt","-conf","properties_test.txt")
-//	val args1 = arrayOf("-t","D:\\out-FakeNewsTest\\tweets-ids.txt","-conf","properties_test.txt")
+			//	val args1 = arrayOf("-t","D:\\out-FakeNewsTest\\tweets-ids.txt","-conf","properties_test.txt")
 
 			val options = Options()
 			val groups = OptionGroup()
@@ -358,7 +363,7 @@ fun downloadUsers() {
 
 	val usersArray = storage.findUsersDownload().filter { it > 0} //To avoid problems with invalid users
 	tweetCrawler.usersCrawl(usersArray.toLongArray(),false,false,false) //in case we are missing any user information from before!
-	
+
 	usersArray.filter { storage.findUser(it) != null }.forEach {
 		storage.removeUserDownload(it) //we remove those users we effectively downloaded
 	}
