@@ -154,10 +154,12 @@ fun checkInconsistencies(path : String, storage : MongoDBStorage){
 fun checkAndProcessTweets(storage : MongoDBStorage){
 
 	val tweetCrawler = TwitterCrawler(storage)
-
-			while(Sequence { storage.queries.find().iterator() }.
-					flatMap{it.tweetIds.asSequence() }.find{storage.findReplies(it) == null} != null) {
-				storage.tweets.find(Filters.lt("created",LocalDateTime.now().minusHours(7))).asSequence().map{it.tweetId}.chunked(10000).forEach{
+	while (Sequence {
+			storage.queries.find().noCursorTimeout(true).iterator()
+		}.flatMap { it.tweetIds.asSequence() }.find { storage.findReplies(it) == null } != null) {
+			storage.tweets.find(Filters.lt("created", LocalDateTime.now().minusHours(7))).
+				noCursorTimeout(true).asSequence().map { it.tweetId }.
+				chunked(10000).forEach {
 					tweetCrawler.run(it)
 				}
 			}
