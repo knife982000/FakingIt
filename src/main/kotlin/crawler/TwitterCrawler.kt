@@ -21,6 +21,7 @@ import edu.isistan.fakenews.scrapper.*
 import org.openqa.selenium.WebDriver
 import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
+import com.mongodb.client.model.Filters
 
 var DEBUG_CRAWLER = false
 val LOGGER = LoggerFactory.getLogger(TwitterCrawler::class.java)
@@ -341,6 +342,20 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 		ids.filter{this.storage.findUser(it) != null}.forEach { userCrawl(it, tweets, followers, followees) }
 	}
 
+	fun repairUsers(){
+		
+		Sequence { storage.users.find(Filters.exists("verified", false)).noCursorTimeout(true).iterator() }.
+				map{it.userId}.chunked(99).map {
+			it.toLongArray()
+		}.forEach {
+			retryTwitterDownloadWrapper {
+				twitter.lookupUsers404(*it).forEach {
+					this.storage.replaceUser(it)
+				}
+			}
+		}
+	}
+	
 	fun usersCrawl(ids: MutableSet<String>) {
 		LOGGER.info("Downloading user list {}",ids)
 		ids.filter {

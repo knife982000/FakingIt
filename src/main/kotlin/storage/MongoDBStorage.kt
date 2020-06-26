@@ -110,7 +110,7 @@ fun Status.toStorage(): Tweet<ObjectId> {
         this.place?.id,
         this.favoriteCount,
         this.isRetweet,
-        this.currentUserRetweetId,
+        this.getRetweetedStatus()?.getId(),
         this.contributors?.toMutableList(),
         this.retweetCount,
         this.isPossiblySensitive,
@@ -279,6 +279,15 @@ class MongoDBStorage : AutoCloseable, Closeable {
         this.users.insertOne(sUser)
         return true
     }
+	
+	fun replaceUser(user : twitter4j.User) : Boolean{
+		val sUser = user.toStorage()
+		val sTweet = user.status?.toStorage()
+        if (sTweet != null && this.tweets.countDocuments(Filters.eq(TWEET_ID, sTweet.tweetId)) == 0L)
+            this.tweets.insertOne(sTweet)
+        this.users.findOneAndReplace(Filters.eq(USER_ID, sUser.userId),sUser)
+		return true
+	}
 
     fun findUser(userId: Long): User<ObjectId>? = this.users.find(Filters.eq(USER_ID, userId)).first()
 

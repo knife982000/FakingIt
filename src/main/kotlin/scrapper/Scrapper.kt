@@ -249,8 +249,8 @@ public fun getMobileReplies(screenname : String, tweetId : String) : MutableList
 
 	doc.getElementsByClass("tweet-container").forEach{
 		it.getElementsByClass("tweet-reply-context username").forEach{
-			it.getAllElements().forEach{it.toString().lines().filter{it.contains("status")}.forEach{
-								println(it)
+			it.getAllElements().forEach{it.toString().lines().filter{it.contains("/status/")}.forEach{
+//								println(it)
 				val sp = it.split("/")
 						replies.add(sp[3].toLong());//,sp[1])
 			}
@@ -513,14 +513,14 @@ fun main(){
 
 	configure("settings.properties")
 
-			val screenname = "OfeFernandez_"
-			val tweet_id = "1270441683126288385"
+//			val screenname = "OfeFernandez_"
+//			val tweet_id = "1270441683126288385"
 
 //		val screenname = "tommantonela89"
 //		var tweet_id = "1200096974541856776"
 
-//	val screenname = "1coyire"
-//	val tweet_id = "12497743406228836352"
+	val screenname = "gabi_ruiz"
+	val tweet_id = "1249804932242386944"
 
 	//	val br =  BufferedReader(InputStreamReader(FileInputStream("html.txt")))
 	//	val content = br.lines().collect(Collectors.joining())
@@ -533,15 +533,15 @@ fun main(){
 	//	}
 
 //			val list = getReplies(screenname,tweet_id
-//	val list = getMobileReplies(screenname,tweet_id)
-//	print(list)
+	val list = getMobileReplies(screenname,tweet_id)
+	print(list)
 
 //		var list = getReactions(tweet_id,"retweeted")
 //		println(list);
 	//
 	//	tweet_id = "1250079749134843905"
-	//	val list = getReactions(tweet_id,"favorited")
-	//			println(list);
+//		val list = getReactions(tweet_id,"favorited")
+//				println(list);
 
 	//	val text = "got ya bitch tip toeing on my hardwood floors \"\" &#128514; http://t.co/cOU2WQ5L4q\""
 	//	val text = "loving you"

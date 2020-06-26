@@ -154,7 +154,8 @@ fun checkInconsistencies(path : String, storage : MongoDBStorage){
 fun checkAndProcessTweets(storage : MongoDBStorage){
 
 	val tweetCrawler = TwitterCrawler(storage)
-	while (Sequence {
+
+			while (Sequence {
 			storage.queries.find().noCursorTimeout(true).iterator()
 		}.flatMap { it.tweetIds.asSequence() }.find { storage.findReplies(it) == null } != null) {
 			storage.tweets.find(Filters.lt("created", LocalDateTime.now().minusHours(7))).
@@ -214,19 +215,19 @@ fun downloadUsers(storage : MongoDBStorage, filename : String){
 fun checkUsers(storage : MongoDBStorage){
 
 	val users_to_fix = mutableSetOf<Long>()
-
-			storage.users.find(Filters.exists("verified", false) ).iterator().forEach{
+	
+	storage.users.find(Filters.exists("verified", false) ).iterator().forEach{
 		users_to_fix.add(it.userId)
 	}
-
+			
 	println(users_to_fix.size)
 
 }
 
 fun main(args: Array<String>){
 
-//	configure("settings.txt")
-	configure(args[0])
+	configure("settings.txt")
+//	configure(args[0])
 	val storage = MongoDBStorage()
 
 	//add all userIds from users to usersDownload to force download with the new data
@@ -251,8 +252,11 @@ fun main(args: Array<String>){
 	//		storage.userDownloads.insertOne()
 	//	}
 
-	//	val crawler = TwitterCrawler(storage) 
-	//	
+//	checkUsers(storage)
+	
+		val crawler = TwitterCrawler(storage) 
+		crawler.repairUsers()
+	
 	//	val username = "alexleavitt"
 	//	val id = "1232016593091084291"
 	////	val replies = crawler.getReplies(username,id,true)	
@@ -278,7 +282,7 @@ fun main(args: Array<String>){
 	//
 	//	configure("settings.properties")
 	//
-		checkAndProcessTweets(storage)
+//		checkAndProcessTweets(storage)
 
 	//	checkInconsistencies("ids_teleton.txt",storage)
 
