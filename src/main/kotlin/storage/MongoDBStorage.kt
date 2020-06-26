@@ -351,6 +351,9 @@ class MongoDBStorage : AutoCloseable, Closeable {
         if (tweet.place != null)
             this.storePlace(tweet.place)
         this.tweets.insertOne(sTweet)
+        if (tweet.retweetedStatus != null) {
+            this.storeTweet(tweet.retweetedStatus)
+        }
         return true
     }
 
