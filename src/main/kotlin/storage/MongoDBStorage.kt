@@ -274,8 +274,14 @@ class MongoDBStorage : AutoCloseable, Closeable {
             return false
         }
         val sTweet = user.status?.toStorage()
-        if (sTweet != null && this.tweets.countDocuments(Filters.eq(TWEET_ID, sTweet.tweetId)) == 0L)
+        if (sTweet != null && this.tweets.countDocuments(Filters.eq(TWEET_ID, sTweet.tweetId)) == 0L) {
+            if (user.status != null)
+                this.storePlace(user.status.place)
             this.tweets.insertOne(sTweet)
+            if (user.status.retweetedStatus != null) {
+                this.storeTweet(user.status.retweetedStatus)
+            }
+        }
         this.users.insertOne(sUser)
         return true
     }
