@@ -27,7 +27,7 @@ data class GeoLocation(var latitude: Double=0.0, var longitude: Double=0.0)
 /**
  * BaseEntity without extra information
  */
-data class BaseEntity(override var start: Int=0, override var end: Int) : IEntity
+data class BaseEntity(override var start: Int=0, override var end: Int=0) : IEntity
 
 /**
  * Entity representing a mention to an user in a tweet
@@ -74,7 +74,8 @@ data class MediaEntity(override var url: String="",
  */
 data class Tweet<T>(var id: T?=null,
                     var tweetId: Long=0,
-                    var userId: Long?=0, //Stored in another collection
+                    var userId: Long=-1, //Stored in another collection
+//					var userScreenname : String?=null, //necesito guardarlo para los replies :( y por las dudas que los usuarios no est�n todav�a almacenados
                     var text: String="",
                     var created: Date= Date(),
                     var source: String="", //is it important?
@@ -115,20 +116,30 @@ data class User<T>(var id: T?=null,
                    var description: String?=null,
                    var contributorsEnabled: Boolean=false,
                    var profileImageURL: String="",
-                   var biggerProfileImageURL: String="",
-                   var miniProfileImageURL: String="",
-                   var originalProfileImageURL: String="",
-                   var profile400x400ImageURL: String="",
-                   var profileImageURLHttps: String="",
-                   var biggerProfileImageHttps: String="",
-                   var miniProfileImageHttps: String="",
-                   var originalProfileImageHttps: String="",
-                   var profile400x400ImageHttps: String="",
+                   var biggerProfileImageURL: String?=null,
+                   var miniProfileImageURL: String?=null,
+                   var originalProfileImageURL: String?=null,
+                   var profile400x400ImageURL: String?=null,
+                   var profileImageURLHttps: String?=null,
+                   var biggerProfileImageHttps: String?=null,
+                   var miniProfileImageHttps: String?=null,
+                   var originalProfileImageHttps: String?=null,
+                   var profile400x400ImageHttps: String?=null,
                    var defaultProfileImage: Boolean=false,
                    var url: String?=null,
                    var protected: Boolean=false,
                    var followerCount: Int=0,
-                   var status: Long?=null)
+                   var status: Long?=null,
+				   var favoritesCount: Int=0,
+				   var friendsCount: Int=0,
+				   var lang: String? = null,
+				   var listedCount: Int=0,
+				   var statusesCount: Int=0,
+				   var timeZone: String?=null,
+				   var offset: Int=0,
+				   var geoEnabled: Boolean=false,
+				   var verified: Boolean=false	   
+)
 
 /**
  * Place
@@ -140,7 +151,7 @@ data class Place<T>(var id: T?=null,
                     var name: String="",
                     var fullName: String="",
                     var country: String="",
-                    var boundingBox: BoundingBox,
+                    var boundingBox: BoundingBox=BoundingBox(),
                     var within: MutableList<String>?=null)
 
 /**
@@ -148,22 +159,32 @@ data class Place<T>(var id: T?=null,
  */
 data class Query<T>(var id: T?=null,
                     var text: String="",
+                    var bucket: Int=0,
                     var tweetIds: MutableList<Long> = mutableListOf())
 
-/**
- * Represents the social connection of an user
- */
-data class UserConnections<T>(var id: T?,
-                              var userId: Long=0,
-                              var followees: MutableList<Long> = mutableListOf(),
-                              var followers: MutableList<Long> = mutableListOf(),
-                              var tweets: MutableList<Long> = mutableListOf())
+
+data class UserTweets<T>(var id: T?=null,
+                         var userId: Long=0,
+                         var tweets: MutableList<Long> = mutableListOf())
+
+data class TweetReplies<T>(var id: T?=null,
+                         var tweetId: Long=0,
+                         var replies: MutableList<Long> = mutableListOf())
+
+data class TweetReactions<T>(var id: T?=null,
+                         var tweetId: Long=0,
+                         var users: MutableList<Long> = mutableListOf())
+
+data class UserRelations<T>(var id: T?=null,
+                            var userId: Long=0,
+                            var bucket: Int=0,
+                            var rel: MutableList<Long> = mutableListOf())
 /**
  * Represents a query that has not been downloaded yet
  */
 data class QueryDownload<T>(var id: T?=null,
-                           var text: String="",
-                           var maxId: Long = -1L)
+                            var text: String="",
+                            var maxId: Long = -1L)
 
 /**
  * Represents a URL that has not been downloaded yet
@@ -178,3 +199,8 @@ data class URLDownload<T>(var id: T?=null,
  */
 data class UserDownload<T>(var id: T?=null,
                            var userId: Long = 0L)
+
+data class CursorDownload<T>(var id: T?=null,
+                             var userId: Long = 0L,
+                             var cursor: Long = 0L,
+                             var collection: String = "")

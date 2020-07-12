@@ -10,11 +10,18 @@ repositories {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    implementation "org.mongodb:mongodb-driver-sync:3.11.1"
-    implementation "org.twitter4j:twitter4j-core:4.0.7"
-    implementation "org.slf4j:slf4j-log4j12:1.7.28"
-    implementation "commons-cli:commons-cli:1.4"
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    compile "org.mongodb:mongodb-driver-sync:3.11.1"
+    compile "org.twitter4j:twitter4j-core:4.0.7"
+    compile "org.twitter4j:twitter4j-stream:4.0.7"
+    compile "org.slf4j:slf4j-api:1.7.28"
+    compile "commons-cli:commons-cli:1.4"
+    compile "org.jsoup:jsoup:1.12.1"
+    compile "org.openpnp:opencv:3.4.2-1"
+    compile "org.seleniumhq.selenium:selenium-java:3.141.59"
+    compile "net.sourceforge.tess4j:tess4j:4.1.0"
+    compile "com.google.code.gson:gson:2.8.5"
+    compile "org.jooby:jooby-undertow:1.6.6"
 }
 
 compileKotlin {
@@ -23,3 +30,32 @@ compileKotlin {
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
 }
+
+task compileExtension(type: Zip) {
+    from 'TwitterScrapper-FirefoxExtension/'
+    include '*'
+    include '*/*' //to include contents of a folder present inside Reports directory
+    archiveName 'extension.xpi'
+    destinationDir(file("$buildDir"))
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'edu.isistan.fakenews.FakeNewsCrawlerKt'
+    //  attributes 'Main-Class': 'storage.AccessStorageKt'
+    }    
+
+   from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    
+}
+
+task otherJar(type: Jar) {
+    manifest {
+//        attributes 'Main-Class': 'edu.isistan.fakenews.FakeNewsCrawlerKt'
+      attributes 'Main-Class': 'storage.AccessStorageKt'
+    }
+    baseName 'AccessStorageKt'
+//    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } } //si dejás esta línea el jar resultante duplica el tamaño
+    with jar
+}
+
