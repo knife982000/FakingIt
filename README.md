@@ -43,7 +43,7 @@ $ gradlew clean build
 
 Currently, the tool only supports Twitter as social meddia. Hence for retrieving the data, the tool requires configuring the corresponding Twitter API keys. API keys can be obtained from the [Twitter Developers portal](https://developer.twitter.com/en/docs/basics/authentication/guides/access-tokens.html).
 
-Data is storaged in a [Mongo](https://www.mongodb.com/) database, hence for running *Faking It!* it is neccesary to have a MongoDB instance running. Several collections are created to store all the retrieved content. Indexes are also created.
+Data is storaged in a [Mongo](https://www.mongodb.com/) database, hence for running *Faking It!* it is neccesary to have a MongoDB instance running in the local machine with the default configuration. Several collections are created to store all the retrieved content. Indexes are also created.
 
 ### Configuration
 
@@ -113,8 +113,7 @@ Future releases of the tool will include:
 
 ## Contact info:
 
-* Juan Manuel Rodriguez ([juanmanuel.rodriguez@isistan.unicen.edu.ar](mailto:juanmanuel.rodriguez@isistan.unicen.edu.ar))
 * Antonela Tommasel ([antonela.tommasel@isistan.unicen.edu.ar](mailto:antonela.tommasel@isistan.unicen.edu.ar))
-
+* Juan Manuel Rodriguez ([juanmanuel.rodriguez@isistan.unicen.edu.ar](mailto:juanmanuel.rodriguez@isistan.unicen.edu.ar))
 
 *Faking it!* is licenced under the Apache License V2.0. Copyright 2020 - ISISTAN - UNICEN - CONICET
