@@ -8,7 +8,7 @@ Social media has become the primary source of news for their users. Besides fost
 
 The Figure shows the diffent types of data that can be retrived using *Faking It!*. 
 
-![]()
+![Faking It!](https://i.ibb.co/Sdg2jsN/fakingit.png)
 
 In summary, *Faking It!* allows to collect:
 
