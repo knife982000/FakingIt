@@ -57,12 +57,6 @@ fun main(args: Array<String>) {
 //    val rootLogger = (loggerContext as LoggerContext).getLogger("org.mongodb.driver");
 //    rootLogger.setLevel(Level.INFO);	
 	
-	//	val args1 = arrayOf("-st","C:\\Users\\Anto\\Desktop\\twitter-hate\\ids_to_download.txt")
-	//	val args1 = arrayOf("-track","-conf","settings_covid.properties")
-	//"ids_test_replies.txt"
-//	val args1 = arrayOf("-t","ids_test_replies.txt","-conf","properties_test.txt")
-			//	val args1 = arrayOf("-t","D:\\out-FakeNewsTest\\tweets-ids.txt","-conf","properties_test.txt")
-
 			val options = Options()
 			val groups = OptionGroup()
 			groups.isRequired = true

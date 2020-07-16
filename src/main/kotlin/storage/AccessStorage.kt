@@ -156,9 +156,9 @@ fun checkAndProcessTweets(storage : MongoDBStorage){
 	val tweetCrawler = TwitterCrawler(storage)
 
 			while (Sequence {
-			storage.queries.find().noCursorTimeout(true).iterator()
-		}.flatMap { it.tweetIds.asSequence() }.find { storage.findReplies(it) == null } != null) {
-			storage.tweets.find(Filters.lt("created", LocalDateTime.now().minusHours(7))).
+				storage.queries.find().noCursorTimeout(true).iterator()
+			}.flatMap { it.tweetIds.asSequence() }.find { storage.findReplies(it) == null } != null) {
+				storage.tweets.find(Filters.lt("created", LocalDateTime.now().minusHours(7))).
 				noCursorTimeout(true).asSequence().map { it.tweetId }.
 				chunked(10000).forEach {
 					tweetCrawler.run(it)
@@ -215,58 +215,25 @@ fun downloadUsers(storage : MongoDBStorage, filename : String){
 fun checkUsers(storage : MongoDBStorage){
 
 	val users_to_fix = mutableSetOf<Long>()
-	
-	storage.users.find(Filters.exists("verified", false) ).iterator().forEach{
+
+			storage.users.find(Filters.exists("verified", false) ).iterator().forEach{
 		users_to_fix.add(it.userId)
 	}
-			
+
 	println(users_to_fix.size)
 
 }
 
 fun main(args: Array<String>){
 
-	configure("settings.txt")
-//	configure(args[0])
+	configure(args[0])
 	val storage = MongoDBStorage()
 
-	//add all userIds from users to usersDownload to force download with the new data
-	//	storage.users.find().asSequence().forEach {
-	//		storage.storeUserDownload(it.userId)
-	//	};
 
 	//	checkUsers(storage)
-	//	downloadUsers(storage,"users_count.txt")
-	//	val result = storage.tweets.aggregate(Arrays.asList(
-	//					Aggregates.group("$"+"userId", Accumulators.sum("count", 1)),
-	//					Aggregates.sort(Sorts.descending("count"))), Document::class.java).allowDiskUse(true)
-	//	
-	//	val writer = Files.newBufferedWriter(File("users_count.txt").toPath());
-	//	result.forEach{
-	//		writer.write("${it.get("_id")},${it.get("count")}")
-	//		writer.newLine()
-	//	}		
-	//	writer.close()
 
-	//	storage.users.find().iterator().forEachRemaining{
-	//		storage.userDownloads.insertOne()
-	//	}
-
-//	checkUsers(storage)
-	
-		val crawler = TwitterCrawler(storage) 
-		crawler.repairUsers()
-	
-	//	val username = "alexleavitt"
-	//	val id = "1232016593091084291"
-	////	val replies = crawler.getReplies(username,id,true)	
-	//	val replies = getReplies(username,id)
-	//	println(replies)	
-	//	replies.forEach{ tweet, pair ->
-	//		println(tweet)
-	//		pair.forEach{it -> println("-- ${it.text}")}
-	//	}
-	//	
+	val crawler = TwitterCrawler(storage) 
+	crawler.repairUsers()
 
 	//	configure(if (args[0] == "-r") args[1] else args[0])
 	//	val storage = MongoDBStorage()
@@ -282,7 +249,7 @@ fun main(args: Array<String>){
 	//
 	//	configure("settings.properties")
 	//
-//		checkAndProcessTweets(storage)
+	//		checkAndProcessTweets(storage)
 
 	//	checkInconsistencies("ids_teleton.txt",storage)
 

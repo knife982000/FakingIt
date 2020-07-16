@@ -31,7 +31,7 @@ class ScreenshotProcessing
 
 fun init(){
 
-	System.setProperty("java.library.path", "C:\\Users\\Anto\\Downloads\\opencv\\build\\java\\x64")
+	System.setProperty("java.library.path", "\\opencv\\build\\java\\x64")
 
 	val sysPathsField = ClassLoader::class.java.getDeclaredField("sys_paths")
 
