@@ -97,12 +97,12 @@ function searchInterceptor(details) {
 //Listen for twitter API in replies
 browser.webRequest.onBeforeRequest.addListener(
     repliesInterceptor,
-    {urls: ["https://api.twitter.com/2/timeline/conversation/*"]},
+    {urls: ["https://twitter.com/i/api/2/timeline/conversation/*"]},
     ["blocking"]
 );
   
 
-//Listen for twitter API in replies
+//Listen for twitter API in searchs
 browser.webRequest.onBeforeRequest.addListener(
     searchInterceptor,
     {urls: ["https://api.twitter.com/2/search/adaptive.json*"]},

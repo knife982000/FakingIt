@@ -232,7 +232,7 @@ private fun parseReplies(doc : Document) : List<Long> {
 	return reps;
 }
 
-public fun getMobileReplies(screenname : String, tweetId : String) : MutableList<Long>{
+fun getMobileReplies(screenname : String, tweetId : String) : MutableList<Long>{
 	val replies = mutableListOf<Long>()
 	LOGGER.debug("Processing replies {} {}",screenname, tweetId)
 
@@ -387,7 +387,13 @@ private fun checkInternetAvailability() : Boolean{
 
 			while(true){
 				try{
-					val con = URL(url).openConnection() as HttpsURLConnection;
+					val con = URL(url).openConnection() as HttpsURLConnection
+					//Mask the connection as a Chrome 86.0.4240 connection
+					con.setRequestProperty("User-Agent",
+						"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+								"Chrome/86.0.4240.183 Safari/537.36 " +
+								"RuxitSynthetic/1.0 v8239450947 t38550 ath9b965f92 " +
+								"altpub cvcv=2")
 
 					if(con.getResponseCode() == 200)
 						return true
