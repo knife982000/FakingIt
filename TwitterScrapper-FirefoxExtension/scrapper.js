@@ -105,7 +105,7 @@ browser.webRequest.onBeforeRequest.addListener(
 //Listen for twitter API in searchs
 browser.webRequest.onBeforeRequest.addListener(
     searchInterceptor,
-    {urls: ["https://api.twitter.com/2/search/adaptive.json*"]},
+    {urls: ["https://twitter.com/i/api/2/search/adaptive.json?*"]},
     ["blocking"]
 );
   
