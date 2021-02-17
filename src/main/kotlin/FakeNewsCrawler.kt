@@ -22,6 +22,7 @@ import java.util.stream.Collectors
 import org.apache.log4j.LogManager
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.LoggerContext
+import edu.isistan.fakenews.webcrawler.TwitterScreenshotAndObfuscatedCrawler
 
 
 private class FakeNewsCrawler
@@ -52,12 +53,12 @@ fun main(args: Array<String>) {
 
 	//Add option for getting news from specific sources
 
-	
-//	val loggerContext = LoggerFactory.getILoggerFactory();
-//    val rootLogger = (loggerContext as LoggerContext).getLogger("org.mongodb.driver");
-//    rootLogger.setLevel(Level.INFO);	
-	
-			val options = Options()
+
+	//	val loggerContext = LoggerFactory.getILoggerFactory();
+	//    val rootLogger = (loggerContext as LoggerContext).getLogger("org.mongodb.driver");
+	//    rootLogger.setLevel(Level.INFO);	
+
+	val options = Options()
 			val groups = OptionGroup()
 			groups.isRequired = true
 			groups.addOption(Option("d", "download", false, "start the query download process"))
@@ -95,6 +96,16 @@ fun main(args: Array<String>) {
 					)
 			groups.addOption(userTweets)
 
+			val usersTimeline = Option(
+					"ua",
+					"user timeline",
+					true,
+					"starts the user timeline download. It requires a list of userIds or screennames to download. The list can have both userIds or usernnames."
+					)
+			usersTimeline.argName = "file"
+			usersTimeline.args = 1
+			groups.addOption(usersTimeline)
+	
 			groups.addOption(
 					Option(
 							"u",
@@ -114,14 +125,14 @@ fun main(args: Array<String>) {
 			tweet.args = 1
 			groups.addOption(tweet) //instead of using queries, you can download specific tweet ids
 
-			val tweetR = Option("tr", "tweets", true, "start the in reply to download process (only the tweets)")
+			val tweetR = Option("tr", "inreply", true, "start the in reply to download process (only the tweets)")
 			tweetR.argName = "file"
 			tweetR.args = 1
 			groups.addOption(tweetR)
 
 			val tweetRF = Option(
 					"trf",
-					"tweets",
+					"inreplyfull",
 					true,
 					"start the full in reply to download process (the tweets + favorites and retweets)"
 					)
@@ -190,12 +201,20 @@ fun main(args: Array<String>) {
 							)
 					)
 
+
+			options.addOption(
+					Option(
+							"replies",
+							"replies",
+							false,
+							"download all replies. By default it does not download tweet replies"
+							)
+					)
+
 			val parser: CommandLineParser = DefaultParser()
 			try { // parse the command line arguments
-				val line = parser.parse(options, args) //TODO 
+				val line = parser.parse(options, args) 
 
-						//		NAME_DB = line.getOptionValue("ddb", "FakeNewsTest")
-						//		FAKE_NEWS_DB = line.getOptionValue("ddb.name", "FakeNewsTest")
 						configure(line.getOptionValue("conf", "settings.properties")!!)
 						when {
 					line.hasOption("h") -> showHelp(options)
@@ -210,10 +229,11 @@ fun main(args: Array<String>) {
 				//								if(!line.hasOption("sc")){
 				when {
 					line.hasOption("d") -> download(line.hasOption("rec"))
-					line.hasOption("t") -> downloadTweet(line.getOptionValue("t"), line.hasOption("rec"))
+					line.hasOption("t") -> downloadTweet(line.getOptionValue("t"), line.hasOption("rec"),line.hasOption("replies"))
 					line.hasOption("tr") -> downloadInReplyTo(line.getOptionValue("tr"), false,line.hasOption("rec"))
 					line.hasOption("trf") -> downloadInReplyTo(line.getOptionValue("trf"), true,line.hasOption("rec"))
 					line.hasOption("u") -> downloadUsers()
+					line.hasOption("ua") -> downloadUsersFull(line.getOptionValue("ua"))
 					line.hasOption("ur") -> downloadUsersTweetsRelations(line.hasOption("all"),false,true,true)
 					line.hasOption("ut") -> downloadUsersTweetsRelations(line.hasOption("all"),true,false,false)
 				}
@@ -262,13 +282,17 @@ fun downloadTweetScreenshot(filename: String?) {
 		tweetIds.addAll(loadTweets(filename))
 	}
 
-	val screenshotCrawler = TwitterScreenshotCrawler(storage)
-			screenshotCrawler.run(tweetIds)
-			screenshotCrawler.close()
+	//	val screenshotCrawler = TwitterScreenshotCrawler(storage)
+	//			screenshotCrawler.run(tweetIds)
+	//			screenshotCrawler.close()
+	//
+	//			val obfuscatedScreenshotCrawler = TwitterObfuscatedScreenshotCrawler(storage)
+	//			obfuscatedScreenshotCrawler.run(tweetIds)
+	//			obfuscatedScreenshotCrawler.close()
 
-			val obfuscatedScreenshotCrawler = TwitterObfuscatedScreenshotCrawler(storage)
-			obfuscatedScreenshotCrawler.run(tweetIds)
-			obfuscatedScreenshotCrawler.close()
+	val normalAndObfuscatedScreenshotCrawler = TwitterScreenshotAndObfuscatedCrawler(storage)
+			normalAndObfuscatedScreenshotCrawler.run(tweetIds)
+			normalAndObfuscatedScreenshotCrawler.close()
 }
 
 fun downloadWeb() {
@@ -314,7 +338,7 @@ private fun loadTweets(filename: String?): MutableList<Long> {
 				return ArrayList<Long>()
 			}
 
-	val tweetIds = ArrayList<Long>()
+	val tweetIds = ArrayList<Long>(1_000_000)
 			file.readLines().map { it.trim() }.filter { it.isNotEmpty() }.forEach {
 				LOGGER.debug("Adding tweet: \"{}\"", it)
 				tweetIds.add(it.toLong())
@@ -323,7 +347,7 @@ private fun loadTweets(filename: String?): MutableList<Long> {
 			return tweetIds
 }
 
-fun downloadTweet(filename: String?, recursive: Boolean) {
+fun downloadTweet(filename: String?, recursive: Boolean, replies : Boolean) {
 
 	if (filename == null) {
 		LOGGER.error("File name is undefined")
@@ -342,7 +366,7 @@ fun downloadTweet(filename: String?, recursive: Boolean) {
 						)
 
 				val tweetCrawler = TwitterCrawler(storage)
-				tweetCrawler.run(tweetIds, recursive)
+				tweetCrawler.run(tweetIds, recursive, replies)
 				storage.close()
 
 			}
@@ -389,6 +413,43 @@ fun downloadUsersTweetsRelations(all : Boolean = false,tweets: Boolean, followee
 		else //get tweets for queries, get users for those queries, call usersCrawl
 			tweetCrawler.usersCrawl(storage.findAllQueryIds().asSequence().mapNotNull{it -> storage.findTweet(it)?.userId}.filter{it > 0}.toList().toLongArray(), tweets, followees, followers)
 
+}
+
+fun downloadUsersFull(filename : String?) {
+
+	if (filename == null) {
+		LOGGER.error("File name is undefined")
+		return
+	}
+	val storage = MongoDBStorage()
+	
+	val userIds = mutableSetOf<Long>() //we need to check whether the given list has strings or longs
+	val downloadUsers = mutableSetOf<String>()
+	
+	val file = File(filename)
+	file.readLines().map { it.trim() }.filter { it.isNotEmpty() }.forEach {
+				LOGGER.debug("Adding user: \"{}\"", it)
+				try{
+					userIds.add(it.toLong())
+
+				}catch (e: NumberFormatException) {
+//					val u = storage.findUser(it)
+//					if (u != null)
+//						userIds.add(u.userId)
+//					else
+						downloadUsers.add(it)
+				}
+	}
+					
+	val tweetCrawler = TwitterCrawler(storage)	
+	tweetCrawler.usersCrawl(downloadUsers)
+	downloadUsers.mapNotNull { it -> storage.findUser(it) }.forEach{u -> userIds.add(u.userId)}
+		
+	if(userIds.size == 0)
+		return
+	
+	tweetCrawler.usersCrawl(userIds.toLongArray(), true, false, false)
+	storage.close()
 }
 
 fun downloadInReplyTo(filename: String?, full: Boolean, recursive: Boolean) {

@@ -52,7 +52,7 @@ data class URLEntity(override var url: String="",
  * @see Place
  */
 data class BoundingBox(var location: List<GeoLocation> = mutableListOf(),
-                       var locationType: String = "")
+                       var locationType: String? = "")
 
 /**
  * Entity representing a media URL

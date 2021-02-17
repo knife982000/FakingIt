@@ -314,6 +314,7 @@ private fun queryStaticHTLM(username: String, tweetid: String): List<Any?> {
 
                 retry = false
             } else {
+		
                 LOGGER.error("ERROR: {}", e.toString());
                 checkInternetAvailability()
                 //				while(!checkInternetAvailability()){
@@ -330,6 +331,7 @@ private fun queryStaticHTLM(username: String, tweetid: String): List<Any?> {
         doc.getElementsByClass("replies-to  permalink-inner permalink-replies").forEach {
 
             val e = it.getElementsByClass("tweets-wrapper").iterator().next().getElementsByClass("ThreadedDescendants")
+																 
                 .iterator().next().getElementsByClass("stream-container").iterator().next();
             cursor = e.attr("data-min-position");
         }
@@ -417,6 +419,8 @@ private fun getURLContent(url: String, enable_javascript: Boolean = true): Strin
                     "User-Agent",
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/603.3.8 (KHTML, like Gecko) Version/10.1.2 Safari/603.3.8"
                 );
+																																																   
+	 
             else
                 con.setRequestProperty("User-Agent", "ELinks/0.13.GIT (textmode; Linux 2.6.29 i686; 119x51-2)")
 
@@ -443,6 +447,7 @@ private fun getURLContent(url: String, enable_javascript: Boolean = true): Strin
                 LOGGER.error("ERROR: Inexistent page {} {}", url, e.toString());
                 retry = false
             } else {
+		  
                 LOGGER.error("ERROR: {}", e.toString());
                 checkInternetAvailability()
 
@@ -498,6 +503,7 @@ fun getReactions(tweetId: String, what: String): List<Long> {
                 LOGGER.error("ERROR: Inexistent tweet {} {}", tweetId, e.toString());
                 retry = false
             } else {
+		  
                 LOGGER.error("ERROR: {}", e.toString());
                 checkInternetAvailability()
                 //				while(!checkInternetAvailability()){
@@ -651,3 +657,53 @@ fun getSearchedPotentialReplies(text: String, tweetId: Long, since: String, unti
     LOGGER.debug("Gotten search {} size: {}", text, tweets.size)
     return tweets.keys.filter { it > tweetId }.toList()
 }
+		   
+ 
+										
+
+								   
+
+									  
+										  
+
+									  
+										 
+
+							   
+									   
+
+																	 
+														  
+								  
+				
+
+																			
+														  
+								  
+													   
+											   
+																		
+										
+	  
+	 
+
+												
+													
+			   
+
+												  
+				   
+   
+									
+												  
+					 
+
+																									  
+						   
+
+										
+							
+															   
+	
+							   
+ 

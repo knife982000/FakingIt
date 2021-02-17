@@ -186,7 +186,7 @@ fun twitter4j.User.toStorage(): User<ObjectId> {
  */
 fun twitter4j.Place.toStorage(): Place<ObjectId> {
     return Place(null, this.id, this.url, this.placeType, this.name, this.fullName, this.country,
-        toStorage(this.boundingBoxType, this.boundingBoxCoordinates),
+        if (this.boundingBoxCoordinates != null && this.boundingBoxType != null) toStorage(this.boundingBoxType, this.boundingBoxCoordinates) else BoundingBox(),
         this.containedWithIn?.map { it.id }?.toMutableList()
     )
 }
@@ -194,7 +194,7 @@ fun twitter4j.Place.toStorage(): Place<ObjectId> {
 /**
  * Create a boundingBox
  */
-fun toStorage(type: String, geodata: Array<Array<twitter4j.GeoLocation>>): BoundingBox {
+fun toStorage(type: String?, geodata: Array<Array<twitter4j.GeoLocation>>): BoundingBox {
     return BoundingBox(geodata.flatMap { it.map { g -> GeoLocation(g.latitude, g.longitude) } }.toMutableList(), type)
 }
 
@@ -275,7 +275,7 @@ class MongoDBStorage : AutoCloseable, Closeable {
         }
         val sTweet = user.status?.toStorage()
         if (sTweet != null && this.tweets.countDocuments(Filters.eq(TWEET_ID, sTweet.tweetId)) == 0L) {
-            if (user.status != null)
+            if (user.status != null && user.status.place != null)
                 this.storePlace(user.status.place)
             this.tweets.insertOne(sTweet)
             if (user.status.retweetedStatus != null) {
@@ -295,7 +295,7 @@ class MongoDBStorage : AutoCloseable, Closeable {
 		return true
 	}
 
-    fun findUser(userId: Long): User<ObjectId>? = this.users.find(Filters.eq(USER_ID, userId)).first()
+    fun findUser(userId: Long): User<ObjectId>? = this.users.find(Filters.eq(USER_ID, userId)).noCursorTimeout(true).first()
 
 //	fun findUser(username: String): User<ObjectId>? = this.users.find(Filters.eq(USER_SCREENNAME, username)).first()
 
@@ -573,7 +573,7 @@ class MongoDBStorage : AutoCloseable, Closeable {
     }
 
     fun userTweetsPresent(userId: Long): Boolean {
-        return this.userTweets.find(Filters.eq(USER_ID, userId)).first() != null
+    	return this.userTweets.find(Filters.eq(USER_ID, userId)).first() != null
     }
 
     fun userFolloweesFulledDownload(userId: Long): Boolean {

@@ -22,14 +22,24 @@ import edu.isistan.fakenews.crawler.TwitterCrawler
 
 import edu.isistan.fakenews.scrapper.*
 import edu.isistan.fakenews.storage.Tweet
+import edu.isistan.fakenews.storage.UserTweets
 
 import edu.isistan.fakenews.*
 import edu.isistan.fakenews.storage.FAKE_NEWS_DB
-import edu.isistan.fakenews.storage.Query
+
 import java.util.Arrays
 import com.mongodb.client.model.Accumulators
 import com.mongodb.client.model.Sorts
 import com.mongodb.client.model.Aggregates
+import twitter4j.Query
+import twitter4j.QueryResult
+import org.jsoup.Jsoup
+
+import edu.isistan.fakenews.scrapper.*
+import java.util.Date
+import java.text.SimpleDateFormat
+import java.util.Locale
+
 
 class AccessStorage
 
@@ -42,7 +52,7 @@ fun findScreenshot(storage : MongoDBStorage) {
 		println(it.tweetId)
 		//			println(it.text)
 
-		if(storage.findTweetScreenshot(it.tweetId) != null){
+		if(storage.findScreenshot(it.tweetId) != null){
 
 			println("saving...")
 
@@ -224,36 +234,58 @@ fun checkUsers(storage : MongoDBStorage){
 
 }
 
-fun main(args: Array<String>){
-
-	configure(args[0])
-	val storage = MongoDBStorage()
-
-
-	//	checkUsers(storage)
-
-	val crawler = TwitterCrawler(storage) 
-	crawler.repairUsers()
-
-	//	configure(if (args[0] == "-r") args[1] else args[0])
-	//	val storage = MongoDBStorage()
-	//
-	//	if(args[0] == "-r")
-	//		formQuery(storage)
-
-
-	//
-	//	println(storage.tweets.find().filter{ it.userId < 0}.toList().size)
-	//
-
-	//
-	//	configure("settings.properties")
-	//
-	//		checkAndProcessTweets(storage)
-
-	//	checkInconsistencies("ids_teleton.txt",storage)
-
-	storage.close()
+fun TwitterCrawler.search(query : Query) : QueryResult{
+	return twitter.search(query)
 }
+
+// Given a set of tweets, search tweets from that users written during the covid period and including any of related keywords
+fun searchTweetsUsers(filename : String, storage : MongoDBStorage, queryText : String, since: String, until: String){
+	
+	val twitter = TwitterCrawler(storage)
+	val driver = initFirefoxWithScrapperExtension()
+	
+	val file = File(filename)
+	file.readLines().map { it.trim() }.filter { it.isNotEmpty() }.
+		asSequence().chunked(200).forEach{ // every 200 tweets
+			
+			val tweets = mutableListOf<Long>()
+		
+			it.mapNotNull{t -> storage.findTweet(t.toLong())?.userId}. // tweets in database
+				distinct().  
+				filter{u -> !storage.userTweetsPresent(u)}. // users without tweets in database
+				forEach{u ->
+					val sn = storage.findUser(u)?.screenName
+					if(sn != null){
+						val ut = getUserTweets(sn,since,until,queryText,driver)
+						storage.storeUserTweets(u,ut.toList())
+						tweets.addAll(ut)
+					}
+				}
+			twitter.run(tweets)
+	}
+	
+	driver.quit()
+}
+
+fun deleteTweetsUsers(storage : MongoDBStorage, words : List<String>, since : String, until: String){ // users with tweets that do not match the selected keywords can be deleted
+	
+	val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH);
+	val since_d = formatter.parse(since)
+	val until_d = formatter.parse(until)
+		
+	storage.userTweets.find().noCursorTimeout(true).forEach{
+		val (to_keep, to_remove) = it.tweets.mapNotNull{t -> storage.findTweet(t)}.
+				  partition{tweet ->
+					  tweet.created.after(since_d) &&
+					  tweet.created.before(until_d) &&
+					  words.any{it in tweet.text.toLowerCase()}}
+		
+		storage.tweets.deleteMany(Filters.`in`("tweetId",to_remove.map{t -> t.tweetId}))
+		storage.userTweets.replaceOne(Filters.eq("userId",it.userId),UserTweets(null, it.userId, to_keep.map{t -> t.tweetId}.toMutableList()))
+
+	}
+	
+}
+
 
 
