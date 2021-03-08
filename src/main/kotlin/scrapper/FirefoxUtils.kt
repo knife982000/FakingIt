@@ -168,3 +168,7 @@ fun windowScrollY(javascriptExecutor: JavascriptExecutor): Long {
     }
     return o as Long
 }
+
+fun windowScrollTo(javascriptExecutor: JavascriptExecutor, x: Int, y: Int) {
+    val o = javascriptExecutor.executeScript("return window.scrollTo($x,$y)")
+}

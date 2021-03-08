@@ -213,7 +213,9 @@ fun main(args: Array<String>) {
 
 			val parser: CommandLineParser = DefaultParser()
 			try { // parse the command line arguments
-				val line = parser.parse(options, args) 
+				val line = parser.parse(options, args) //TODO
+//				val args1 = arrayOf<String>("-t","C:/Users/Anto/Desktop/ids-covid-CMU-2y.txt","-replies","-conf","covid-fake-settings")
+//				val line = parser.parse(options, args1) //TODO 
 
 						configure(line.getOptionValue("conf", "settings.properties")!!)
 						when {
@@ -366,9 +368,11 @@ fun downloadTweet(filename: String?, recursive: Boolean, replies : Boolean) {
 						)
 
 				val tweetCrawler = TwitterCrawler(storage)
-				tweetCrawler.run(tweetIds, recursive, replies)
+				tweetIds.chunked(2000).forEach{tweetCrawler.run(it, recursive, replies)}		
 				storage.close()
 
+				tweetCrawler.close()
+				
 			}
 
 }

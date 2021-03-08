@@ -31,6 +31,7 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import kotlin.math.pow
 import kotlin.system.exitProcess
+import java.nio.file.Paths
 
 
 private var mimeType: Map<String, String>? = null
@@ -41,7 +42,10 @@ fun readMimeTypes(): Map<String, String> {
     }
     val result = mutableMapOf<String, String>()
     @Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-    val resourceFile = File(ClassLoader.getSystemClassLoader().getResource("mimeTypes.csv").file)
+//    val resourceFile = File(ClassLoader.getSystemClassLoader().getResource("mimeTypes.csv").file)	
+//	val resourceFile = File(Paths.get(ClassLoader.getSystemClassLoader().getResource("mimeTypes.csv").toURI()).toString())
+	val resourceFile = File("mimeTypes.csv")
+	
     for (line in Files.readAllLines(resourceFile.toPath())) {
         val sep = line.split(",")
         if (sep.size != 2) {
@@ -146,7 +150,8 @@ abstract class ScreenshotCrawler(val storage: MongoDBStorage, var format: String
 		tweetIds.filter{this.storage.findScreenshot(it) == null}.forEach{
 			
 			val tweet = this.storage.findTweet(it)
-			val user = this.storage.findUser(tweet!!.userId!!)
+			if(tweet != null){
+				val user = this.storage.findUser(tweet.userId!!)
 			val url = "https://twitter.com/${user!!.userId}/status/$it" 
 			val screenshot = this.takeScreenshot(url)
             val bytes = ByteArrayOutputStream()
@@ -154,6 +159,7 @@ abstract class ScreenshotCrawler(val storage: MongoDBStorage, var format: String
             
 			this.storage.storeScreenshot(it.toString(), bytes.toByteArray(), readInverseMimeType()[".${this.format}"] ?:
                                                                     error("Invalid extension .${this.format}"))
+			}
 			
 			//this is to obfuscate the image using ocr
 //			val obfuscatedImage = obfuscateImage(processImage(screenshot,tweet),tweet,user.name)

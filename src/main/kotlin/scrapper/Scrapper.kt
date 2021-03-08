@@ -31,6 +31,7 @@ import java.net.HttpURLConnection
 import edu.isistan.fakenews.*
 import edu.isistan.fakenews.storage.Tweet
 import org.bson.types.ObjectId
+import java.net.URLEncoder
 
 
 const val _USER = "#USER"
@@ -38,12 +39,10 @@ const val _TWEET = "#TWEET"
 const val _POS = "#POS"
 const val _WHAT = "retweeted"
 
-const val replies_base_path = "https://twitter.com/${_USER}/status/${_TWEET}"
-const val replies_mobile_base_path = "https://mobile.twitter.com/${_USER}/status/${_TWEET}"
-const val replies_path =
-    "https://twitter.com/i/${_USER}/conversation/${_TWEET}?include_available_features=1&include_entities=1&max_position=${_POS}&&reset_error_state=false"
+var bearer : String? = null
+var guest_token : String? = null
 
-const val reactions_base_path = "https://twitter.com/i/activity/${_WHAT}_popup?id=${_TWEET}"
+val user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/96.0"
 
 //const val search_base_path = "https://twitter.com/i/search/timeline?f=tweets&vertical=default&include_available_features=1&include_entities=1&reset_error_state=false&src=typd&q=${_TWEET}&l=en"
 //const val search_path = "https://twitter.com/i/searhttp://marketplace.eclipse.org/marketplace-client-intro?mpc_install=2257536ch/timeline?f=live&vertical=default&include_available_features=1&include_entities=1&reset_error_state=false&src=typd&max_position=${_POS}&q=${_TWEET}&l=en"
@@ -58,12 +57,11 @@ const val pattern_RT = "RT @[a-zA-Z0-9]*:"
 const val pattern_url =
     "((https?|ftp|gopher|telnet|file|Unsure|http):((//)|(\\\\))+[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]*)";
 
-
 class Scrapper
 
 var LOGGER = LoggerFactory.getLogger(Scrapper::class.java)!!
 
-fun getUserTweets(screenname: String, since: String, until: String, query: String = "", driver: WebDriver? = null): Set<Long> {
+fun getUserTweets(screenname: String, since: String?, until: String?, query: String = "", driver: WebDriver? = null): Set<Long> {
 
     var localDriver: WebDriver? = when (driver) {
         null -> initFirefoxWithScrapperExtension()
@@ -141,8 +139,14 @@ fun getUserTweets(screenname: String, since: String, until: String, query: Strin
     return replies.toSet();
 }
 
-fun scrollSearch(screenname: String, since: String, until: String, query: String, driver: WebDriver) {
-    val url = "https://twitter.com/search?q=from%3A${screenname}%20since%3A${since}%20until%3A${until}%20${query}"
+fun scrollSearch(screenname: String, since: String?, until: String?, query: String, driver: WebDriver) {
+	
+	var url = "https://twitter.com/search?q=from%3A${screenname}%20${query}"
+	if(since != null)
+		url = url+"%20since%3A${since}"
+	if(until != null)
+		url = url+"%20until%3A${until}"
+
     println(url)
 
     driver.get(url)
@@ -286,120 +290,208 @@ private fun scrollConversation(screenname: String, tweetId: String, driver: WebD
     }
 }
 
+private fun getCredentials(user_agent: String) : Pair<String?,String?>{
+	
+	var url = "https://abs.twimg.com/responsive-web/client-web/main.90f9e505.js"
+	
+    var con: HttpsURLConnection?
 
-private fun queryStaticHTLM(username: String, tweetid: String): List<Any?> {
+    var content: String?
 
-    val replies = ArrayList<Long>()
-    var cursor: String? = null
+    con = URL(url).openConnection() as HttpsURLConnection
+ 
+    con.setRequestProperty("User-Agent", user_agent);
+																																																  
+    var br = BufferedReader(InputStreamReader(con.getInputStream()))
+    content = br.lines().collect(Collectors.joining())
 
-    val url = replies_base_path.replace("#USER", username).replace("#TWEET", tweetid);
-
-    LOGGER.debug("URL {}", url)
-
-    var doc: Document? = null
-    var retry = true;
-
-    while (retry) {
-        try {
-            doc = Jsoup.connect(url).get();
-            retry = false
-        } catch (e: IOException) {
-            if (e.toString().contains("FileNotFound") || e.toString().contains("404") || e.toString().contains("403") ||
-                e.message?.contains("FileNotFound") ?: false || e.message?.contains("404") ?: false || e.message?.contains(
-                    "403"
-                ) ?: false
-            ) {
-
-                LOGGER.error("ERROR: {} {}", url, e.toString());
-
-                retry = false
-            } else {
+	val regex = "s=\"AAAAA[^\"]+\"".toRegex()
 		
-                LOGGER.error("ERROR: {}", e.toString());
-                checkInternetAvailability()
-                //				while(!checkInternetAvailability()){
-                //					LOGGER.error("ERROR: No internet ... waiting");
-                //					Thread.sleep(4000)
-                //				}
+	val matches = regex.find(content)
+	
+	var bearer : String? = null
+	
+	if(matches != null)
+		bearer = matches.groupValues.get(0).substring(3).dropLast(1)
+	
+	if(bearer == null)
+		return Pair<String?,String?>(null,null)
+	
+	url = "https://api.twitter.com/1.1/guest/activate.json"
+    con = URL(url).openConnection() as HttpsURLConnection
+    con.requestMethod = "POST"
+	
+	con.setRequestProperty("User-Agent", user_agent);
+    con.setRequestProperty("Content-Type", "application/json")
+	con.setRequestProperty("Authorization", "Bearer $bearer")
+	
+	br = BufferedReader(InputStreamReader(con.getInputStream()))
+    content = br.lines().collect(Collectors.joining())
 
-            }
-
-        }
-    }
-
-    if (doc != null) {
-        doc.getElementsByClass("replies-to  permalink-inner permalink-replies").forEach {
-
-            val e = it.getElementsByClass("tweets-wrapper").iterator().next().getElementsByClass("ThreadedDescendants")
-																 
-                .iterator().next().getElementsByClass("stream-container").iterator().next();
-            cursor = e.attr("data-min-position");
-        }
-
-        replies.addAll(parseReplies(doc))
-    }
-
-    return listOf<Any?>(cursor, replies)
+	val guest_token = JsonParser().parse(content).getAsJsonObject().get("guest_token").getAsString()
+		
+	return Pair<String,String>(bearer,guest_token)
+	
 }
 
-private fun parseReplies(doc: Document): List<Long> {
+// we could add a counter for those cases in which a 429 occurs and we want to retry in several minutes
+fun getPage(url : String, user_agent : String, tweetId : String) : Triple<List<Long>,String?,Long>{
+	
+	var con: HttpsURLConnection?
+	var br : BufferedReader?
+	var content : String? = null
+	
+	try {
+		con = URL(url).openConnection() as HttpsURLConnection
+		
+		con.setRequestProperty("User-Agent", user_agent)
+	    con.setRequestProperty("Content-Type", "application/json")
+		con.setRequestProperty("Authorization", "Bearer $bearer")
+		con.setRequestProperty("x-guest-token", guest_token)
+		
+		br = BufferedReader(InputStreamReader(con.getInputStream()))
+	    content = br.lines().collect(Collectors.joining())
+	
+	}
+	catch(e : IOException){
+		LOGGER.error("Exception in scrapping replies: ${e.message}")
+				val pair = getCredentials(user_agent)
+				bearer = pair.first
+				guest_token = pair.second
+	}
+		
+	if(content == null)
+		return Triple<List<Long>,String?,Long>(mutableListOf<Long>(),null,-1)
+	
+	val objects = JsonParser().parse(content).getAsJsonObject()
+	
+	val tweets_json = objects.get("globalObjects").getAsJsonObject().get("tweets").getAsJsonObject()
+		
+	val replies = tweets_json.entrySet().map{it.key.toLong()}.toList()
+	
+	var cant_replies = 0L
+	val searched = tweets_json.get(tweetId)
+	if(searched != null)
+		cant_replies = tweets_json.get(tweetId).getAsJsonObject().get("reply_count").getAsLong()
+	
+	if(replies.size <= 1)
+		Pair<List<Long>,String?>(mutableListOf<Long>(),null)
 
-    val reps = ArrayList<Long>()
-
-    doc.getElementsByClass("stream-item-header")?.forEach {
-
-        val line = it.getElementsByClass("tweet-timestamp js-permalink js-nav js-tooltip").attr("href");
-
-        val sp = line.split("/");
-
-        if (sp.size >= 4)
-            reps.add(sp[3].replace("\"", "").toLong());
-    }
-    return reps;
+	val entries = objects.get("timeline").getAsJsonObject().get("instructions").getAsJsonArray()[0]
+						 .getAsJsonObject()?.get("addEntries")?.getAsJsonObject()?.get("entries")?.getAsJsonArray()
+	
+//	val entries = objects.get("timeline").getAsJsonObject().get("instructions").getAsJsonArray().map{it}
+//						 .mapNotNull{it.getAsJsonObject().get("addEntries")}
+//						 .mapNotNull{it.getAsJsonObject().get("entries")}.mapNotNull{it.getAsJsonArray()}.flatMap{it}
+//
+	if(entries == null)
+		return Triple<List<Long>,String?,Long>(replies,null,cant_replies)
+	
+	val cursor = entries.mapNotNull{it.getAsJsonObject().get("content")}
+		   .mapNotNull{it.getAsJsonObject().get("operation")}
+		   .mapNotNull{it.getAsJsonObject().get("cursor")}
+		   .mapNotNull{it.getAsJsonObject().get("value")}
+		   .map{it.getAsString()}
+		   .toList().getOrNull(0)
+	
+//	val cursor = entries.mapNotNull{it.getAsJsonObject().get("content")}
+//		   .mapNotNull{it.getAsJsonObject().get("timelineModule")}
+//		   .mapNotNull{it.getAsJsonObject().get("items")}
+//		   .mapNotNull{it.getAsJsonArray()}.flatMap{it}
+//		   .mapNotNull{it.getAsJsonObject().get("item")}
+//		   .mapNotNull{it.getAsJsonObject().get("content")}
+//		   .mapNotNull{it.getAsJsonObject().get("timelineCursor")}
+//		   .mapNotNull{it.getAsJsonObject().get("value")}
+//		   .map{it.getAsString()}
+//		   .toList().getOrNull(0)
+	
+	
+	return Triple<List<Long>,String?,Long>(replies,cursor,cant_replies)
 }
 
-fun getMobileReplies(screenname: String, tweetId: String): MutableList<Long> {
-    val replies = mutableListOf<Long>()
-    LOGGER.debug("Processing replies {} {}", screenname, tweetId)
+fun getScrapedReplies(screenname: String, tweetId: String): MutableList<Long> {
 
-    val url = replies_mobile_base_path.replace("#USER", screenname).replace("#TWEET", tweetId);
-    //Access the content or fails if the url is not present
-    val content = getURLContent(url, false) ?: return replies
+    LOGGER.debug("Scrapping replies {} {}", screenname, tweetId)
 
-    val doc = Jsoup.parse(content)
-//	println(doc)
+	if(bearer == null || guest_token == null){
+		val pair = getCredentials(user_agent)
+		bearer = pair.first
+		guest_token = pair.second
+	}
+	 
+	if(bearer == null || guest_token == null)
+		return mutableListOf<Long>(-1)
+	
+	val all_replies = mutableSetOf<Long>()
+	
+	var (replies,cursor,cant_replies) = getPage("https://twitter.com/i/api/2/timeline/conversation/$tweetId.json?include_reply_count=1",user_agent,tweetId)
+		
+	all_replies.addAll(replies)
+	
+	while(cursor != null){
+		LOGGER.debug("Scrapping replies cursor {} {}", screenname, tweetId)
+		val url = "https://twitter.com/i/api/2/timeline/conversation/$tweetId.json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&include_can_media_tag=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_quote_count=true&include_reply_count=1&tweet_mode=extended&include_entities=true&include_user_entities=true&include_ext_media_color=true&include_ext_media_availability=true&send_error_codes=true&simple_quoted_tweet=true&referrer=tweet&count=20&cursor=${URLEncoder.encode(cursor, "utf-8")}&include_ext_has_birdwatch_notes=false&ext=mediaStats%2ChighlightedLabel"
+		val triple = getPage(url,user_agent,tweetId)
+		cursor = triple.second
+		all_replies.addAll(triple.first)
+	}
+	
+	all_replies.remove(tweetId.toLong())
+	LOGGER.debug("Obtained replies {} {}", cant_replies, replies)
+	
+	if(cant_replies == -1L || (cant_replies > 10 && cant_replies > all_replies.size))
+		return mutableListOf<Long>(-1)
 
-    if (doc.getElementsByTag("title").text().endsWith("$screenname) on Twitter")) {
-        return replies
-    }
+    return all_replies.toMutableList();
+}
 
-    doc.getElementsByClass("tweet-container").forEach {
-        it.getElementsByClass("tweet-reply-context username").forEach {
-            it.getAllElements().forEach {
-                it.toString().lines().filter { it.contains("/status/") }.forEach {
-//								println(it)
-                    val sp = it.split("/")
-                    replies.add(sp[3].toLong());//,sp[1])
-                }
-            }
-        }
-    }
-//	println(replies)
-    if (!replies.isEmpty()) {
-        replies.add(-1L);
-        return replies;
-    }
-
-    if (replies.isEmpty())
-        doc.getElementsByClass("meta-and-actions").forEach {
-            it.getElementsByClass("metadata").forEach {
-                val sp = it.getElementsByTag("a").first().attr("href").split("/")
-                replies.add(sp[3].replace(Regex("\\?.*"), "").toLong());//,sp[1])
-            }
-        }
-
-    LOGGER.debug("Obtained replies {}", replies)
-    return replies;
+// the idea here is to avoid making useless request to the api, we can remove all tweets with zero retweets
+fun getRetweetCount(tweetId : String) : Long{
+	
+	LOGGER.debug("Getting retweet count {}", tweetId)
+	
+	if(bearer == null || guest_token == null){
+		val pair = getCredentials(user_agent)
+		bearer = pair.first
+		guest_token = pair.second
+	}
+	
+	if(bearer == null || guest_token == null)
+		return -1
+	
+	var con: HttpsURLConnection?
+	var br : BufferedReader?
+	var content : String? = null
+	
+	try {
+		con = URL("https://twitter.com/i/api/2/timeline/conversation/$tweetId.json").openConnection() as HttpsURLConnection
+		
+		con.setRequestProperty("User-Agent", user_agent)
+	    con.setRequestProperty("Content-Type", "application/json")
+		con.setRequestProperty("Authorization", "Bearer $bearer")
+		con.setRequestProperty("x-guest-token", guest_token)
+		
+		br = BufferedReader(InputStreamReader(con.getInputStream()))
+	    content = br.lines().collect(Collectors.joining())
+	}
+	catch(e : IOException){
+		LOGGER.error("Exception in getting retweet count: ${e.message}")
+	}
+		
+	if(content == null)
+		return -1
+	
+	val objects = JsonParser().parse(content).getAsJsonObject()
+	
+	val tweets_json = objects.get("globalObjects").getAsJsonObject().get("tweets").getAsJsonObject()
+			
+	var cant_retweets = -1L
+	val searched = tweets_json.get(tweetId)
+	if(searched != null)
+		cant_retweets = tweets_json.get(tweetId).getAsJsonObject().get("retweet_count").getAsLong()
+	
+	return cant_retweets
+	
 }
 
 private fun getURLContent(url: String, enable_javascript: Boolean = true): String? {
@@ -460,65 +552,6 @@ private fun getURLContent(url: String, enable_javascript: Boolean = true): Strin
 }
 
 
-fun getReactions(tweetId: String, what: String): List<Long> {
-
-    LOGGER.debug("Processing {} {} ", what, tweetId)
-
-    val url = reactions_base_path.replace(_TWEET, tweetId).replace(_WHAT, what)
-
-    LOGGER.debug("URL {}", url)
-
-    //	var reactions : ArrayList<Long>? = null
-    val reactions = ArrayList<Long>()
-
-    var con: HttpsURLConnection?
-    var retry = true
-
-    while (retry) {
-        try {
-            con = URL(url).openConnection() as HttpsURLConnection;
-            con.setRequestProperty("User-Agent", "ELinks/0.13.GIT (textmode; Linux 2.6.29 i686; 119x51-2)")
-            val br = BufferedReader(InputStreamReader(con.getInputStream()))
-
-            val content = br.lines().collect(Collectors.joining())
-            println(content)
-            val jsonObject = JsonParser().parse(content).getAsJsonObject()
-            val html = jsonObject.get("htmlUsers").getAsString()
-
-            val doc = Jsoup.parse(html);
-
-            doc.getElementsByClass("account  js-actionable-user js-profile-popup-actionable ").forEach {
-                reactions.add(it.attr("data-user-id").toLong())
-            }
-
-            retry = false;
-
-        } catch (e: IOException) {
-
-            if (e.toString().contains("FileNotFound") || e.toString().contains("404") || e.toString().contains("403") ||
-                e.message?.contains("FileNotFound") ?: false || e.message?.contains("404") ?: false || e.message?.contains(
-                    "403"
-                ) ?: false
-            ) {
-                LOGGER.error("ERROR: Inexistent tweet {} {}", tweetId, e.toString());
-                retry = false
-            } else {
-		  
-                LOGGER.error("ERROR: {}", e.toString());
-                checkInternetAvailability()
-                //				while(!checkInternetAvailability()){
-                //					LOGGER.error("ERROR: No internet ... waiting");
-                //					Thread.sleep(2000)
-                //				}
-
-            }
-        }
-    }
-
-    LOGGER.debug("Gotten reactions {} {} {}", tweetId, what, reactions.size)
-
-    return reactions
-}
 
 private fun checkInternetAvailability(): Boolean {
 
@@ -657,53 +690,3 @@ fun getSearchedPotentialReplies(text: String, tweetId: Long, since: String, unti
     LOGGER.debug("Gotten search {} size: {}", text, tweets.size)
     return tweets.keys.filter { it > tweetId }.toList()
 }
-		   
- 
-										
-
-								   
-
-									  
-										  
-
-									  
-										 
-
-							   
-									   
-
-																	 
-														  
-								  
-				
-
-																			
-														  
-								  
-													   
-											   
-																		
-										
-	  
-	 
-
-												
-													
-			   
-
-												  
-				   
-   
-									
-												  
-					 
-
-																									  
-						   
-
-										
-							
-															   
-	
-							   
- 

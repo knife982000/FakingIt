@@ -23,6 +23,8 @@ import edu.isistan.fakenews.storage.Tweet
 import org.bson.types.ObjectId
 import java.util.stream.Collector
 import java.util.stream.Collectors
+import edu.isistan.fakenews.*
+import edu.isistan.fakenews.crawler.TwitterCrawler
 
 	val GREEN = Scalar(0.0,255.0,0.0)
 	val BLACK = Scalar(0.0,0.0,0.0)
@@ -31,7 +33,7 @@ class ScreenshotProcessing
 
 fun init(){
 
-	System.setProperty("java.library.path", "\\opencv\\build\\java\\x64")
+	System.setProperty("java.library.path", System.getProperty("java.library.path", "\\opencv\\build\\java\\x64"))
 
 	val sysPathsField = ClassLoader::class.java.getDeclaredField("sys_paths")
 
@@ -494,10 +496,13 @@ private fun searchWords(tesseract : Tesseract, image : Mat,quoted : Boolean,twee
 
 
 	fun main(){
-		init()
+	
 
 //		DEBUG_DB=true
-//		val storage = MongoDBStorage()
+		configure("settings-mmhs.txt")
+
+		val storage = MongoDBStorage()
+			init()
 //		val tweet : Long
 ////		tweet = 1205245702512754688L
 ////		tweet =1200096974541856776L
@@ -512,7 +517,37 @@ private fun searchWords(tesseract : Tesseract, image : Mat,quoted : Boolean,twee
 //		val obs = obfuscateImage(processed,tw,sn) 
 //		ImageIO.write(obs , "png", File("obs_tesseract.png") );
 		
+		val tweetIds = ArrayList<Long>()
+		tweetIds.add(1043075096544509952)
+		tweetIds.add(1297680444348149760)
+		tweetIds.add(1035902082199572486)
+////		tweetIds.add(1036092005741256705)
+////		tweetIds.add(1037147555367280640)
+////		tweetIds.add(1058255262727827456)
+////		tweetIds.add(1114679161023545344)
+////		tweetIds.add(1044054213465124866)
+//
+//		val tweetCrawler = TwitterCrawler(storage)
+//		tweetCrawler.run(tweetIds, false)
+//
+//			val screenshotCrawler = TwitterScreenshotCrawler(storage)
 		
-		val processed =	getTweetRectangle(ImageIO.read(File("test.png")))
-		ImageIO.write(processed , "png", File("rect.png"))
+//		 val img = screenshotCrawler.takeScreenshot("https://twitter.com/any/status/1043075096544509952")
+//    ImageIO.write(img, "png", File("test.png"))
+		
+//			screenshotCrawler.run(tweetIds)
+//			screenshotCrawler.close()
+//		
+		val obfuscatedScreenshotCrawler = TwitterScreenshotAndObfuscatedCrawler(storage)
+		
+//				 val img = obfuscatedScreenshotCrawler.takeScreenshots("https://twitter.com/any/status/1043075096544509952")
+//    ImageIO.write(img.first, "png", File("test.png"))
+//		 ImageIO.write(img.second, "png", File("test_obs.png"))
+//		
+			obfuscatedScreenshotCrawler.run(tweetIds)
+			obfuscatedScreenshotCrawler.close()
+		
+		storage.close()
+//		val processed =	getTweetRectangle(ImageIO.read(File("test.png")))
+//		ImageIO.write(processed , "png", File("rect.png"))
 	}

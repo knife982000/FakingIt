@@ -287,5 +287,77 @@ fun deleteTweetsUsers(storage : MongoDBStorage, words : List<String>, since : St
 	
 }
 
+fun listTweetIdsUsers(storage : MongoDBStorage, filename : String?){ // lists and saves all tweet ids to be used for another download process (replies)
+	
+	val users = mutableListOf<Long>()
+	if(filename != null){
+		val file = File(filename)
+		file.readLines().map { it.trim() }
+						.filter { it.isNotEmpty() }
+						.mapNotNull { storage.findUser(it) }
+						.forEach { users.add(it.userId) }
+	}
+	
+	val writer = Files.newBufferedWriter(File("muni_tweets.txt").toPath());
 
+	storage.tweets.find().noCursorTimeout(true)
+		.filter{(it.retweetId == null || it.retweetId!! < 0) && (users.isEmpty() || users.contains(it.userId))}
+		.forEach{
+			writer.write(it.tweetId.toString())	
+			writer.newLine()
+	}
+	
+	writer.close()
+}
+
+fun deleteRepliesTweets(storage : MongoDBStorage, filename : String){
+
+	val file = File(filename)
+	val tweets = file.readLines().map { it.trim() }
+						.filter { it.isNotEmpty() }.map{it.toLong()}.toList()
+						
+	
+	storage.tweetReplies.deleteMany(Filters.`nin`("tweetId",tweets))
+}
+
+fun removeRepliesFromUser(storage : MongoDBStorage, username : String){
+	
+	val userId = storage.findUser(username)!!.userId
+		
+	var tweets_user = storage.tweets.find(Filters.eq("userId",userId)).map{it.tweetId}.toList()
+		
+	tweets_user = tweets_user.mapNotNull{storage.findReplies(it)}.filter{it.replies.size == 0}.map{it.tweetId}.toList()
+	
+	println(tweets_user)
+	
+	storage.tweetReplies.deleteMany(Filters.`in`("tweetId",tweets_user))
+	
+}
+
+fun removeAlreadyProcessed(storage : MongoDBStorage, filename : String){
+	val file = File(filename)
+	val tweets = file.readLines().map { it.trim() }
+						.filter { it.isNotEmpty() }.map{it.toLong()}.toList()
+		
+	val writer = Files.newBufferedWriter(File("muni_tweets_updated.txt").toPath());
+
+	tweets.filter{storage.findReplies(it) == null || storage.findReactions(it,"retweeted") == null}
+		.forEach{
+			writer.write(it.toString())	
+			writer.newLine()
+	}
+	
+	writer.close()
+}
+
+//To solve a problem in which replies were gathereded but not saved - buscar en los de replies los tweets que falten
+//fun downloadMissingReplies(storage : MongoDBStorage){
+
+//}
+
+//fun tweetsMentioningAccounts(storage : MongoDBStorage, filename)
+
+//TODO: given a set of tweets, check mentions, reply to and get los "to: XX from: XX"
+//from: XX municipio OR intendente OR muni OR municipalidad
+//mentioning: (@USERNAME)
 
