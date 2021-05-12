@@ -39,6 +39,10 @@ import edu.isistan.fakenews.scrapper.*
 import java.util.Date
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.GregorianCalendar
+import java.time.temporal.ChronoUnit
+import java.time.format.DateTimeFormatter
+import java.nio.file.StandardOpenOption
 
 
 class AccessStorage
@@ -240,124 +244,261 @@ fun TwitterCrawler.search(query : Query) : QueryResult{
 
 // Given a set of tweets, search tweets from that users written during the covid period and including any of related keywords
 fun searchTweetsUsers(filename : String, storage : MongoDBStorage, queryText : String, since: String, until: String){
-	
+
 	val twitter = TwitterCrawler(storage)
-	val driver = initFirefoxWithScrapperExtension()
-	
-	val file = File(filename)
-	file.readLines().map { it.trim() }.filter { it.isNotEmpty() }.
-		asSequence().chunked(200).forEach{ // every 200 tweets
-			
-			val tweets = mutableListOf<Long>()
-		
-			it.mapNotNull{t -> storage.findTweet(t.toLong())?.userId}. // tweets in database
-				distinct().  
-				filter{u -> !storage.userTweetsPresent(u)}. // users without tweets in database
-				forEach{u ->
-					val sn = storage.findUser(u)?.screenName
-					if(sn != null){
-						val ut = getUserTweets(sn,since,until,queryText,driver)
-						storage.storeUserTweets(u,ut.toList())
-						tweets.addAll(ut)
-					}
-				}
-			twitter.run(tweets)
-	}
-	
-	driver.quit()
+			val driver = initFirefoxWithScrapperExtension()
+
+			val file = File(filename)
+			file.readLines().map { it.trim() }.filter { it.isNotEmpty() }.
+			asSequence().chunked(200).forEach{ // every 200 tweets
+
+				val tweets = mutableListOf<Long>()
+
+						it.mapNotNull{t -> storage.findTweet(t.toLong())?.userId}. // tweets in database
+						distinct().  
+						filter{u -> !storage.userTweetsPresent(u)}. // users without tweets in database
+						forEach{u ->
+						val sn = storage.findUser(u)?.screenName
+								if(sn != null){
+									val ut = getUserTweets(sn,"since: $since until: $until $queryText",driver)
+											storage.storeUserTweets(u,ut.toList())
+											tweets.addAll(ut)
+								}
+						}
+						twitter.run(tweets)
+			}
+
+			driver.quit()
 }
 
 fun deleteTweetsUsers(storage : MongoDBStorage, words : List<String>, since : String, until: String){ // users with tweets that do not match the selected keywords can be deleted
-	
+
 	val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH);
 	val since_d = formatter.parse(since)
-	val until_d = formatter.parse(until)
-		
-	storage.userTweets.find().noCursorTimeout(true).forEach{
+			val until_d = formatter.parse(until)
+
+			storage.userTweets.find().noCursorTimeout(true).forEach{
 		val (to_keep, to_remove) = it.tweets.mapNotNull{t -> storage.findTweet(t)}.
-				  partition{tweet ->
-					  tweet.created.after(since_d) &&
-					  tweet.created.before(until_d) &&
-					  words.any{it in tweet.text.toLowerCase()}}
-		
+				partition{tweet ->
+				tweet.created.after(since_d) &&
+				tweet.created.before(until_d) &&
+				words.any{it in tweet.text.toLowerCase()}}
+
 		storage.tweets.deleteMany(Filters.`in`("tweetId",to_remove.map{t -> t.tweetId}))
 		storage.userTweets.replaceOne(Filters.eq("userId",it.userId),UserTweets(null, it.userId, to_keep.map{t -> t.tweetId}.toMutableList()))
 
 	}
-	
+
 }
 
 fun listTweetIdsUsers(storage : MongoDBStorage, filename : String?){ // lists and saves all tweet ids to be used for another download process (replies)
-	
+
 	val users = mutableListOf<Long>()
-	if(filename != null){
-		val file = File(filename)
-		file.readLines().map { it.trim() }
-						.filter { it.isNotEmpty() }
-						.mapNotNull { storage.findUser(it) }
-						.forEach { users.add(it.userId) }
-	}
-	
+			if(filename != null){
+				val file = File(filename)
+						file.readLines().map { it.trim() }
+				.filter { it.isNotEmpty() }
+				.mapNotNull { storage.findUser(it) }
+				.forEach { users.add(it.userId) }
+			}
+
 	val writer = Files.newBufferedWriter(File("muni_tweets.txt").toPath());
 
 	storage.tweets.find().noCursorTimeout(true)
-		.filter{(it.retweetId == null || it.retweetId!! < 0) && (users.isEmpty() || users.contains(it.userId))}
-		.forEach{
-			writer.write(it.tweetId.toString())	
-			writer.newLine()
+	.filter{(it.retweetId == null || it.retweetId!! < 0) && (users.isEmpty() || users.contains(it.userId))}
+	.forEach{
+		writer.write(it.tweetId.toString())	
+		writer.newLine()
 	}
-	
+
 	writer.close()
 }
 
 fun deleteRepliesTweets(storage : MongoDBStorage, filename : String){
 
 	val file = File(filename)
-	val tweets = file.readLines().map { it.trim() }
-						.filter { it.isNotEmpty() }.map{it.toLong()}.toList()
-						
-	
+			val tweets = file.readLines().map { it.trim() }
+	.filter { it.isNotEmpty() }.map{it.toLong()}.toList()
+
+
 	storage.tweetReplies.deleteMany(Filters.`nin`("tweetId",tweets))
 }
 
 fun removeRepliesFromUser(storage : MongoDBStorage, username : String){
-	
+
 	val userId = storage.findUser(username)!!.userId
-		
-	var tweets_user = storage.tweets.find(Filters.eq("userId",userId)).map{it.tweetId}.toList()
-		
-	tweets_user = tweets_user.mapNotNull{storage.findReplies(it)}.filter{it.replies.size == 0}.map{it.tweetId}.toList()
-	
-	println(tweets_user)
-	
-	storage.tweetReplies.deleteMany(Filters.`in`("tweetId",tweets_user))
-	
+
+			var tweets_user = storage.tweets.find(Filters.eq("userId",userId)).map{it.tweetId}.toList()
+
+			tweets_user = tweets_user.mapNotNull{storage.findReplies(it)}.filter{it.replies.size == 0}.map{it.tweetId}.toList()
+
+			println(tweets_user)
+
+			storage.tweetReplies.deleteMany(Filters.`in`("tweetId",tweets_user))
+
 }
 
 fun removeAlreadyProcessed(storage : MongoDBStorage, filename : String){
 	val file = File(filename)
-	val tweets = file.readLines().map { it.trim() }
-						.filter { it.isNotEmpty() }.map{it.toLong()}.toList()
-		
-	val writer = Files.newBufferedWriter(File("muni_tweets_updated.txt").toPath());
+			val tweets = file.readLines().map { it.trim() }
+	.filter { it.isNotEmpty() }.map{it.toLong()}.toSet()
+
+	val writer = Files.newBufferedWriter(File("MISSING_${file.name}").toPath());
 
 	tweets.filter{storage.findReplies(it) == null || storage.findReactions(it,"retweeted") == null}
-		.forEach{
-			writer.write(it.toString())	
-			writer.newLine()
+	.forEach{
+		writer.write(it.toString())	
+		writer.newLine()
 	}
-	
+
 	writer.close()
 }
 
+// esto creo que era para los municipios...
+//Por cada uno de los <tweetID, [replies]> mirar cuáles no están bajados y pasarlos a una lista
 //To solve a problem in which replies were gathereded but not saved - buscar en los de replies los tweets que falten
-//fun downloadMissingReplies(storage : MongoDBStorage){
+fun getMissingReplies(storage : MongoDBStorage){ 
 
-//}
+	val writer = Files.newBufferedWriter(File("missing_replies.txt").toPath());
 
-//fun tweetsMentioningAccounts(storage : MongoDBStorage, filename)
+	storage.tweetReplies.find().noCursorTimeout(true).iterator().forEach{
+		it.replies.filter{storage.findTweet(it) == null}.forEach{
+			writer.write(it.toString())	
+			writer.newLine()	
+		}
+	}
 
-//TODO: given a set of tweets, check mentions, reply to and get los "to: XX from: XX"
-//from: XX municipio OR intendente OR muni OR municipalidad
-//mentioning: (@USERNAME)
+	writer.close()
+
+}
+
+//from: XX until: first tweet since: un par de semanas antes while since > created --> tratar de recuperar los tweets más viejos --> parecido al de abajo, solo que las fechas van al revés
+fun tweetsFromAccounts(storage:MongoDBStorage, filename : String){
+	//		val file = File(filename)
+	//	val usernames = file.readLines().map { it.trim() }
+	//						.filter { it.isNotEmpty() }.toList()
+	//
+	//	val now = Instant.now()
+	//	
+	//	val writer = Files.newBufferedWriter(File("tweets_from_munis.txt").toPath());
+	//	
+	//	val days = 21L
+	//	val reg = Regex("T.*")
+	//	
+	//	usernames.mapNotNull{storage.findUser(it)}.forEach{
+	//		val name = it.screenName
+	//		val created_at = it.created.toInstant()
+	//		
+	//		
+	//		var until = storage.userTweets.find(Filters.eq("userId",it.userId)).noCursorTimeout(true)
+	//						  .flatMap{it.tweets}.mapNotNull{t -> storage.findTweet(t.toLong())?.created}.min()?.toInstant()
+	//			
+	////		until = if (until == null) created_at
+	//		
+	//		var since = until.minus(days,ChronoUnit.DAYS)
+	//		
+	//		val tweets = mutableSetOf<Long>()
+	//		
+	//		while (until.isAfter(created_at)){
+	//			
+	//			val untilP = since.truncatedTo(ChronoUnit.DAYS).toString().replace(reg,"")
+	//			val sinceP = since.truncatedTo(ChronoUnit.DAYS).toString().replace(reg,"")
+	//			
+	//			println("$sinceP  $untilP")
+	//			
+	//			tweets.addAll(getScrappedSearch("from:$name until:$untilP since:$sinceP"))
+	//			
+	//			since = until
+	//			until = since.minus(days,ChronoUnit.DAYS)
+	//		}
+	//		
+	////		//save tweets in file
+	//		tweets.forEach{
+	//			writer.write(it.toString())	
+	//			writer.newLine()	
+	//		}
+	//	}
+	//	writer.close()
+}
+
+//tweets mentioning accounts since the created time of the account
+fun tweetsMentioningAccounts(storage : MongoDBStorage, filename : String){
+
+	val file = File(filename)
+			val usernames = file.readLines().map { it.trim() }
+	.filter { it.isNotEmpty() }.toList()
+
+	val now = Instant.now()
+
+	val writer = Files.newBufferedWriter(File("mentions_to_munis.txt").toPath());
+
+	val days = 21L
+			val reg = Regex("T.*")
+			usernames.mapNotNull{storage.findUser(it)}.forEach{
+				val name = it.screenName
+						val created_at = it.created
+
+						var since = created_at.toInstant()
+						var until = since.plus(days,ChronoUnit.DAYS)
+
+						val mentions = mutableSetOf<Long>()
+
+						while (since.isBefore(now)){
+
+							val untilP = until.truncatedTo(ChronoUnit.DAYS).toString().replace(reg,"")
+							val sinceP = since.truncatedTo(ChronoUnit.DAYS).toString().replace(reg,"")
+
+							println("$sinceP  $untilP")
+
+							mentions.addAll(getScrappedSearch("@$name since:$sinceP until:$untilP"))
+							println("mentions $mentions")
+							since = until
+							until = since.plus(days,ChronoUnit.DAYS)
+						}
+
+				//		//save tweets in file
+				mentions.forEach{ // esto es lo que hay que bajar después
+					writer.write(it.toString())	
+					writer.newLine()	
+				}
+				writer.flush();
+			}
+			writer.close()
+}
+
+//quotes de los tweets de las cuentas en el archivo para la búsqueda es: url:TWEET_ID usando el search
+fun searchQuotes(storage : MongoDBStorage?, filename : String){
+
+	val file = File(filename)
+	val tweets = file.readLines().map { it.trim() }
+								 .filter { it.isNotEmpty() }.toSet()
+
+//	println(tweets)
+	val writer = Files.newBufferedWriter(File("quotes_to_munis.txt").toPath(),StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+
+	tweets//.mapNotNull{storage.findTweet(it.toLong())}
+		.asSequence().chunked(7)
+		.forEach{ tweetIds ->
+//			println(tweetIds)
+			
+			val	tt = StringBuilder()
+			tweetIds.forEach{tt.append(" OR url:${it}")}
+			
+//			println(tt.substring(3))
+			
+//			val quotes = getScrappedSearch("url:${tweetIds}")
+			val quotes = getScrappedSearch(tt.substring(3))
+//			
+			tweetIds.forEach{quotes.remove(it.toLong())}
+			println("quotes: $quotes")
+						
+			quotes.forEach{ 
+				writer.write(it.toString())	
+				writer.newLine()	
+			}
+		writer.flush()
+	}
+	writer.close()
+
+}
 

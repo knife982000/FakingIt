@@ -51,6 +51,7 @@ const val TWEET_SCREENSHOT_COLLECTION = "tweetScreenshot"
 const val TWEET_REPLIES_COLLECTION = "tweetReplies"
 const val TWEET_FAVORITES_COLLECTION = "tweetFavorites"
 const val TWEET_RETWEETERS_COLLECTION = "tweetRetweeters"
+const val TWEET_QUOTES_COLLECTION = "tweetQuotes"
 
 const val TWEET_ID = "tweetId"
 const val USER_ID = "userId"
@@ -213,6 +214,7 @@ class MongoDBStorage : AutoCloseable, Closeable {
     lateinit var userFollowees: MongoCollection<UserRelations<ObjectId>>
     lateinit var userFollowers: MongoCollection<UserRelations<ObjectId>>
     lateinit var tweetReplies: MongoCollection<TweetReplies<ObjectId>>
+	lateinit var tweetQuotes: MongoCollection<TweetReplies<ObjectId>>
     lateinit var tweetFavorites: MongoCollection<TweetReactions<ObjectId>>
     lateinit var tweetRetweeters: MongoCollection<TweetReactions<ObjectId>>
 
@@ -311,6 +313,9 @@ class MongoDBStorage : AutoCloseable, Closeable {
     fun findReplies(tweetId: Long): TweetReplies<ObjectId>? =
         this.tweetReplies.find(Filters.eq(TWEET_ID, tweetId)).first()
 
+	fun findQuotes(tweetId: Long): TweetReplies<ObjectId>? =
+        this.tweetQuotes.find(Filters.eq(TWEET_ID, tweetId)).first()
+	
     fun findReactions(tweetId: Long, what: String): TweetReactions<ObjectId>? {
 
         return when (what) {
@@ -526,6 +531,10 @@ class MongoDBStorage : AutoCloseable, Closeable {
         this.tweetReplies.insertOne(TweetReplies(null, tweetId, replies.toMutableList()))
     }
 
+	fun storeTweetQuotes(tweetId: Long, quotes: List<Long>) {
+        this.tweetQuotes.insertOne(TweetReplies(null, tweetId, quotes.toMutableList()))
+    }
+	
     fun storeTweetReactions(tweetId: Long, reactions: List<Long>, what: String) {
         when (what) {
             "favorited" -> this.tweetFavorites.insertOne(TweetReactions(null, tweetId, reactions.toMutableList()))
@@ -772,6 +781,10 @@ class MongoDBStorage : AutoCloseable, Closeable {
             LOGGER.info("Creating $TWEET_ID - $BUCKET for $TWEET_REPLIES_COLLECTION")//
             this.tweetReplies.createIndex(Indexes.hashed(TWEET_ID), IndexOptions().name(TWEET_ID_INDEX))
         }
+		if (this.tweetQuotes.listIndexes().find { it.getString("name") == TWEET_ID_INDEX } == null) {
+            LOGGER.info("Creating $TWEET_ID - $BUCKET for $TWEET_QUOTES_COLLECTION")//
+            this.tweetQuotes.createIndex(Indexes.hashed(TWEET_ID), IndexOptions().name(TWEET_ID_INDEX))
+        }
         if (this.tweetFavorites.listIndexes().find { it.getString("name") == TWEET_ID_INDEX } == null) {
             LOGGER.info("Creating $TWEET_ID - $BUCKET for $TWEET_FAVORITES_COLLECTION")//
             this.tweetFavorites.createIndex(Indexes.hashed(TWEET_ID), IndexOptions().name(TWEET_ID_INDEX))
@@ -876,6 +889,11 @@ class MongoDBStorage : AutoCloseable, Closeable {
 
         this.tweetReplies = this.database.getCollection(
             TWEET_REPLIES_COLLECTION,
+            TweetReplies::class.java
+        ).withCodecRegistry(codecRegistry) as MongoCollection<TweetReplies<ObjectId>>
+
+		this.tweetQuotes = this.database.getCollection(
+            TWEET_QUOTES_COLLECTION,
             TweetReplies::class.java
         ).withCodecRegistry(codecRegistry) as MongoCollection<TweetReplies<ObjectId>>
 

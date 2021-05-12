@@ -125,6 +125,16 @@ fun main(args: Array<String>) {
 			tweet.args = 1
 			groups.addOption(tweet) //instead of using queries, you can download specific tweet ids
 
+//			val replies = Option("treplies", "treplies", true, "start the reply download process")
+//			tweet.argName = "file"
+//			tweet.args = 1
+//			groups.addOption(replies) /
+//	
+//			val quote = Option("tquotes", "tquotes", true, "start the quote download process")
+//			tweet.argName = "file"
+//			tweet.args = 1
+//			groups.addOption(quote) 
+	
 			val tweetR = Option("tr", "inreply", true, "start the in reply to download process (only the tweets)")
 			tweetR.argName = "file"
 			tweetR.args = 1
@@ -210,12 +220,20 @@ fun main(args: Array<String>) {
 							"download all replies. By default it does not download tweet replies"
 							)
 					)
+	
+			options.addOption(
+					Option(
+							"quotes",
+							"quotes",
+							false,
+							"download quotes to tweets. By default it does not download tweet quotes"
+							)
+					)
 
 			val parser: CommandLineParser = DefaultParser()
 			try { // parse the command line arguments
 				val line = parser.parse(options, args) //TODO
-//				val args1 = arrayOf<String>("-t","C:/Users/Anto/Desktop/ids-covid-CMU-2y.txt","-replies","-conf","covid-fake-settings")
-//				val line = parser.parse(options, args1) //TODO 
+
 
 						configure(line.getOptionValue("conf", "settings.properties")!!)
 						when {
@@ -231,9 +249,11 @@ fun main(args: Array<String>) {
 				//								if(!line.hasOption("sc")){
 				when {
 					line.hasOption("d") -> download(line.hasOption("rec"))
-					line.hasOption("t") -> downloadTweet(line.getOptionValue("t"), line.hasOption("rec"),line.hasOption("replies"))
+					line.hasOption("t") -> downloadTweet(line.getOptionValue("t"), line.hasOption("rec"),line.hasOption("replies"),line.hasOption("quotes"))
 					line.hasOption("tr") -> downloadInReplyTo(line.getOptionValue("tr"), false,line.hasOption("rec"))
 					line.hasOption("trf") -> downloadInReplyTo(line.getOptionValue("trf"), true,line.hasOption("rec"))
+//					line.hasOption("treplies") -> downloadReplies()
+//					line.hasOption("tquotes") -> downloadQuotes()
 					line.hasOption("u") -> downloadUsers()
 					line.hasOption("ua") -> downloadUsersFull(line.getOptionValue("ua"))
 					line.hasOption("ur") -> downloadUsersTweetsRelations(line.hasOption("all"),false,true,true)
@@ -349,7 +369,7 @@ private fun loadTweets(filename: String?): MutableList<Long> {
 			return tweetIds
 }
 
-fun downloadTweet(filename: String?, recursive: Boolean, replies : Boolean) {
+fun downloadTweet(filename: String?, recursive: Boolean, replies : Boolean, quotes : Boolean) {
 
 	if (filename == null) {
 		LOGGER.error("File name is undefined")
@@ -368,7 +388,7 @@ fun downloadTweet(filename: String?, recursive: Boolean, replies : Boolean) {
 						)
 
 				val tweetCrawler = TwitterCrawler(storage)
-				tweetIds.chunked(2000).forEach{tweetCrawler.run(it, recursive, replies)}		
+				tweetIds.chunked(2000).forEach{tweetCrawler.run(it, recursive, replies, quotes)}		
 				storage.close()
 
 				tweetCrawler.close()

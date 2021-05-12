@@ -32,6 +32,7 @@ import edu.isistan.fakenews.*
 import edu.isistan.fakenews.storage.Tweet
 import org.bson.types.ObjectId
 import java.net.URLEncoder
+import com.google.gson.JsonArray
 
 
 const val _USER = "#USER"
@@ -61,14 +62,14 @@ class Scrapper
 
 var LOGGER = LoggerFactory.getLogger(Scrapper::class.java)!!
 
-fun getUserTweets(screenname: String, since: String?, until: String?, query: String = "", driver: WebDriver? = null): Set<Long> {
+fun getUserTweets(screenname: String, query: String = "", driver: WebDriver? = null): Set<Long> {
 
     var localDriver: WebDriver? = when (driver) {
         null -> initFirefoxWithScrapperExtension()
         else -> driver
     }
 
-    LOGGER.debug("Processing tweets {} {} {} {}", screenname, since, until, query)
+    LOGGER.debug("Processing tweets {} {}", screenname, query)
 
     checkInternetAvailability()
 
@@ -129,7 +130,7 @@ fun getUserTweets(screenname: String, since: String?, until: String?, query: Str
     //Starting server
     Jooby.run(serverSupplier, "application.port=8080")
     //Scroll twitter with extension
-    scrollSearch(screenname, since, until, query, localDriver!!)
+    scrollSearch(screenname, query, localDriver!!)
     semaphore.acquire()
 
     if (driver == null) {
@@ -139,14 +140,10 @@ fun getUserTweets(screenname: String, since: String?, until: String?, query: Str
     return replies.toSet();
 }
 
-fun scrollSearch(screenname: String, since: String?, until: String?, query: String, driver: WebDriver) {
+fun scrollSearch(screenname: String, query: String, driver: WebDriver) {
 	
 	var url = "https://twitter.com/search?q=from%3A${screenname}%20${query}"
-	if(since != null)
-		url = url+"%20since%3A${since}"
-	if(until != null)
-		url = url+"%20until%3A${until}"
-
+	
     println(url)
 
     driver.get(url)
@@ -164,6 +161,10 @@ fun scrollSearch(screenname: String, since: String?, until: String?, query: Stri
                 """
 							if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu").length == 1) {
 								document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu")[0].click()
+							}
+ 
+							if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1niwhzg r-42olwf r-sdzlij r-1phboty r-rs99b7 r-1w2pmg r-15ysp7h r-gafmid r-1ny4l3l r-1e081e0 r-o7ynqc r-6416eg r-lrvibr").length == 1) {
+								document.getElementsByClassName(" css-18t94o4 css-1dbjc4n r-1niwhzg r-42olwf r-sdzlij r-1phboty r-rs99b7 r-1w2pmg r-15ysp7h r-gafmid r-1ny4l3l r-1e081e0 r-o7ynqc r-6416eg r-lrvibr")[0].click()
 							}
 							""".trimIndent()
             )
@@ -264,13 +265,18 @@ private fun scrollConversation(screenname: String, tweetId: String, driver: WebD
 
     try {
         while (lastTop != windowScrollY(javascript).toInt()) {
-            javascript.executeScript(
+            javascript.executeScript( //css-901oao css-16my406 r-poiln3 r-bcqeeo r-qvutc0 
                 """
-							if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu").length == 1) {
-								document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1jayybb r-o7ynqc r-1j63xyz r-13qz1uu")[0].click()
+							if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1pl7oy7 r-1ny4l3l r-o7ynqc r-6416eg r-13qz1uu").length == 1) {
+								document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1777fci r-1pl7oy7 r-1ny4l3l r-o7ynqc r-6416eg r-13qz1uu")[0].click()
+							}
+ 
+ 							if (document.getElementsByClassName("css-18t94o4 css-1dbjc4n r-1niwhzg r-42olwf r-sdzlij r-1phboty r-rs99b7 r-1w2pmg r-15ysp7h r-gafmid r-1ny4l3l r-1e081e0 r-o7ynqc r-6416eg r-lrvibr").length == 1) {
+								document.getElementsByClassName(" css-18t94o4 css-1dbjc4n r-1niwhzg r-42olwf r-sdzlij r-1phboty r-rs99b7 r-1w2pmg r-15ysp7h r-gafmid r-1ny4l3l r-1e081e0 r-o7ynqc r-6416eg r-lrvibr")[0].click()
 							}
 							""".trimIndent()
             )
+			
             Thread.sleep(1000)//Wait to load... it is horrible but it kind of work!
             lastTop = windowScrollY(javascript).toInt()
             javascript.executeScript("window.scrollTo(0, ${lastTop + scroll})")
@@ -335,9 +341,9 @@ private fun getCredentials(user_agent: String) : Pair<String?,String?>{
 }
 
 // we could add a counter for those cases in which a 429 occurs and we want to retry in several minutes
-fun getPage(url : String, user_agent : String, tweetId : String) : Triple<List<Long>,String?,Long>{
+fun getPage(url : String, tweetId : String?) : Triple<List<Long>,List<String>?,Long>{
 	
-	var con: HttpsURLConnection?
+	var con: HttpsURLConnection? = null
 	var br : BufferedReader?
 	var content : String? = null
 	
@@ -355,13 +361,19 @@ fun getPage(url : String, user_agent : String, tweetId : String) : Triple<List<L
 	}
 	catch(e : IOException){
 		LOGGER.error("Exception in scrapping replies: ${e.message}")
-				val pair = getCredentials(user_agent)
+		println("--- ${con!!.getResponseCode()}")
+		val pair = getCredentials(user_agent)
 				bearer = pair.first
 				guest_token = pair.second
 	}
+	
+	if (con != null && con.getResponseCode() == 404) // if it was a not found, there is no need on rechecking
+		return Triple<List<Long>,List<String>?,Long>(mutableListOf<Long>(),null,-404)
 		
 	if(content == null)
-		return Triple<List<Long>,String?,Long>(mutableListOf<Long>(),null,-1)
+		return Triple<List<Long>,List<String>?,Long>(mutableListOf<Long>(),null,-1)
+	
+//	println(content)
 	
 	val objects = JsonParser().parse(content).getAsJsonObject()
 	
@@ -370,29 +382,33 @@ fun getPage(url : String, user_agent : String, tweetId : String) : Triple<List<L
 	val replies = tweets_json.entrySet().map{it.key.toLong()}.toList()
 	
 	var cant_replies = 0L
-	val searched = tweets_json.get(tweetId)
-	if(searched != null)
-		cant_replies = tweets_json.get(tweetId).getAsJsonObject().get("reply_count").getAsLong()
+	if(tweetId != null){
+		val searched = tweets_json.get(tweetId)
+		if(searched != null)
+			cant_replies = tweets_json.get(tweetId).getAsJsonObject().get("reply_count").getAsLong()
+	}
 	
-	if(replies.size <= 1)
-		Pair<List<Long>,String?>(mutableListOf<Long>(),null)
-
-	val entries = objects.get("timeline").getAsJsonObject().get("instructions").getAsJsonArray()[0]
+	val entries : JsonArray?
+	try{
+		entries =  objects.get("timeline").getAsJsonObject().get("instructions").getAsJsonArray()[0]
 						 .getAsJsonObject()?.get("addEntries")?.getAsJsonObject()?.get("entries")?.getAsJsonArray()
+	}catch(e : Exception){
+		return Triple<List<Long>,List<String>?,Long>(replies,null,cant_replies)
+	}
 	
 //	val entries = objects.get("timeline").getAsJsonObject().get("instructions").getAsJsonArray().map{it}
 //						 .mapNotNull{it.getAsJsonObject().get("addEntries")}
 //						 .mapNotNull{it.getAsJsonObject().get("entries")}.mapNotNull{it.getAsJsonArray()}.flatMap{it}
 //
 	if(entries == null)
-		return Triple<List<Long>,String?,Long>(replies,null,cant_replies)
+		return Triple<List<Long>,List<String>?,Long>(replies,null,cant_replies)
 	
 	val cursor = entries.mapNotNull{it.getAsJsonObject().get("content")}
 		   .mapNotNull{it.getAsJsonObject().get("operation")}
 		   .mapNotNull{it.getAsJsonObject().get("cursor")}
 		   .mapNotNull{it.getAsJsonObject().get("value")}
 		   .map{it.getAsString()}
-		   .toList().getOrNull(0)
+		   .toList()//.getOrNull(0)
 	
 //	val cursor = entries.mapNotNull{it.getAsJsonObject().get("content")}
 //		   .mapNotNull{it.getAsJsonObject().get("timelineModule")}
@@ -406,7 +422,7 @@ fun getPage(url : String, user_agent : String, tweetId : String) : Triple<List<L
 //		   .toList().getOrNull(0)
 	
 	
-	return Triple<List<Long>,String?,Long>(replies,cursor,cant_replies)
+	return Triple<List<Long>,List<String>?,Long>(replies,cursor,cant_replies)
 }
 
 fun getScrapedReplies(screenname: String, tweetId: String): MutableList<Long> {
@@ -424,14 +440,20 @@ fun getScrapedReplies(screenname: String, tweetId: String): MutableList<Long> {
 	
 	val all_replies = mutableSetOf<Long>()
 	
-	var (replies,cursor,cant_replies) = getPage("https://twitter.com/i/api/2/timeline/conversation/$tweetId.json?include_reply_count=1",user_agent,tweetId)
+	val url = "https://twitter.com/i/api/2/timeline/conversation/$tweetId.json?include_reply_count=1&include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&include_can_media_tag=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_quote_count=true&include_reply_count=1&tweet_mode=extended&include_entities=true&include_user_entities=true&include_ext_media_color=true&include_ext_media_availability=true&send_error_codes=true&simple_quoted_tweet=true&referrer=tweet&count=20&include_ext_has_birdwatch_notes=false&ext=mediaStats%2ChighlightedLabel"
+	
+	var (replies,cursor,cant_replies) = getPage(url,tweetId)
 		
 	all_replies.addAll(replies)
 	
 	while(cursor != null){
 		LOGGER.debug("Scrapping replies cursor {} {}", screenname, tweetId)
-		val url = "https://twitter.com/i/api/2/timeline/conversation/$tweetId.json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&include_can_media_tag=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_quote_count=true&include_reply_count=1&tweet_mode=extended&include_entities=true&include_user_entities=true&include_ext_media_color=true&include_ext_media_availability=true&send_error_codes=true&simple_quoted_tweet=true&referrer=tweet&count=20&cursor=${URLEncoder.encode(cursor, "utf-8")}&include_ext_has_birdwatch_notes=false&ext=mediaStats%2ChighlightedLabel"
-		val triple = getPage(url,user_agent,tweetId)
+		
+		val cc = cursor.getOrNull(0)
+		if(cc == null)
+			break
+		
+		val triple = getPage(url+"&cursor=${URLEncoder.encode(cc, "utf-8")}",tweetId)
 		cursor = triple.second
 		all_replies.addAll(triple.first)
 	}
@@ -439,10 +461,65 @@ fun getScrapedReplies(screenname: String, tweetId: String): MutableList<Long> {
 	all_replies.remove(tweetId.toLong())
 	LOGGER.debug("Obtained replies {} {}", cant_replies, replies)
 	
+	if (cant_replies == -404L)
+		return mutableListOf<Long>(-404)
+	
 	if(cant_replies == -1L || (cant_replies > 10 && cant_replies > all_replies.size))
 		return mutableListOf<Long>(-1)
 
     return all_replies.toMutableList();
+}
+
+fun getScrappedSearch(query : String): MutableList<Long> {
+
+    LOGGER.debug("Scrapping query {}", query)
+
+	if(bearer == null || guest_token == null){
+		val pair = getCredentials(user_agent)
+		bearer = pair.first
+		guest_token = pair.second
+	}
+	 
+	if(bearer == null || guest_token == null)
+		return mutableListOf<Long>(-1)
+		
+	val url = "https://twitter.com/i/api/2/search/adaptive.json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&include_can_media_tag=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_quote_count=true&include_reply_count=1&tweet_mode=extended&include_entities=true&include_user_entities=true&include_ext_media_color=true&include_ext_media_availability=true&send_error_codes=true&simple_quoted_tweet=true&tweet_search_mode=live&query_source=typed_query&pc=1&spelling_corrections=1&ext=mediaStats%2ChighlightedLabel&f=live&q=${URLEncoder.encode(query, "utf-8")}"
+			
+	val tweets = mutableSetOf<Long>()
+	
+	var count = 20
+	var (tt,cursor,_) = getPage(url+"&cursor=DefaultBottomCursorValue&count=$count",null)
+		
+	tweets.addAll(tt)
+//	println(tweets)
+	var size = 0
+	
+	while(cursor != null){
+
+		count += 20
+		println(cursor)
+		
+		var cc : String? = "DefaultBottomCursorValue"
+		if(size == tweets.size){
+			cc = cursor.getOrNull(0)
+			if(cc == null || cc.startsWith("refresh"))
+				cc = cursor.getOrNull(1)
+			count = 20
+		}
+		
+		if(cc == null)
+			break;
+		
+		size = tweets.size
+			
+//		println(cc)
+		val triple = getPage(url+"&cursor=${URLEncoder.encode(cc, "utf-8")}&count=$count",null)
+		cursor = triple.second
+		tweets.addAll(triple.first)
+				
+	}
+//	println(tweets)
+	return tweets.toMutableList()
 }
 
 // the idea here is to avoid making useless request to the api, we can remove all tweets with zero retweets
@@ -690,3 +767,4 @@ fun getSearchedPotentialReplies(text: String, tweetId: Long, since: String, unti
     LOGGER.debug("Gotten search {} size: {}", text, tweets.size)
     return tweets.keys.filter { it > tweetId }.toList()
 }
+
