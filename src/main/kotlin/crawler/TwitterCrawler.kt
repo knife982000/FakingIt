@@ -47,6 +47,19 @@ fun Twitter.lookupUsers404(vararg ids: Long): List<User>{
 	}
 }
 
+fun Twitter.lookupScreenname404(vararg sns: String): List<User>{
+	try {
+		return this.lookupUsers(*sns)
+	} catch (e: TwitterException) {
+
+		if (e.statusCode == HttpResponseCode.NOT_FOUND) {
+			LOGGER.warn("Screennames not found ${sns}")
+			return emptyList<User>()
+		}
+		throw e
+	}
+}
+
 fun Twitter.getFriendsList404(id: Long, cursor : Long): PagableResponseList<User>?{
 	try {
 		return this.getFriendsList(id,cursor)
@@ -368,7 +381,21 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 					}
 				}
 	}
-
+	
+	fun usersScreennameCrawl(screennames : MutableSet<String>){
+		LOGGER.info("Downloading user screename list")
+		screennames.filter {
+			this.storage.findUser(it) == null
+		}.chunked(99).forEach {
+			retryTwitterDownloadWrapper {
+				twitter.lookupScreenname404(*screennames.toTypedArray()).forEach {
+					this.storage.storeUser(it)
+				}
+			}
+		}
+	}
+	
+	// We could replace the previous method for a unified version of it changing parameter type
 	fun usersCrawl(ids: LongArray, tweets: Boolean=true, followers: Boolean=true, followees: Boolean=true) {
 		LOGGER.info("Downloading user list")
 		ids.filter {
@@ -382,7 +409,42 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 				}
 			}
 		}
+//		for those users that already exist, we update the tweet list, we do it first, to avoid processing twice all new users
+		ids.filter{this.storage.userTweetsPresent(it)}.forEach { updateUsersTweets(it) }
+//		for new users, we download all the required information
 		ids.filter{this.storage.findUser(it) != null}.forEach { userCrawl(it, tweets, followers, followees) }
+		 
+	}
+	
+	fun updateUsersTweets(userId: Long){ 
+		
+		LOGGER.info("Updating tweets for User {}", userId)
+		var tweets = mutableListOf<Status>()
+		retryTwitterDownloadWrapper {
+			LOGGER.debug("Downloading pages...")
+			@Suppress("NAME_SHADOWING") 
+			val page = Paging(1)
+			while (true) {
+				LOGGER.debug("Page: {} UserId: {}", page, userId)
+				val pageTweets = twitter.getUserTimeline(userId, page)
+				tweets.addAll(pageTweets)
+				if (pageTweets.isEmpty())
+					break
+					page.page += 1
+			}
+		}
+		
+		val oldTweets = this.storage.findUserTweets(userId).toSet()
+		tweets = tweets.filter{t -> !oldTweets.contains(t.id)}.toMutableList()
+		LOGGER.info("Got new tweets for User {} {}", userId,tweets.size)
+		if (tweets.size > 0){
+			tweets.forEach { this.storeTweet(it) }
+			this.storage.updateUserTweets(userId, tweets.map { it.id })
+		}
+		tweets.map{t -> t.id}.chunked(100).forEach{tweetReplyDownload(it)}	
+		
+		oldTweets.chunked(100).forEach{tweetReplyDownload(it)}
+		
 	}
 
 	fun repairUsers(){

@@ -310,6 +310,8 @@ class MongoDBStorage : AutoCloseable, Closeable {
 
     fun findTweet(tweetId: Long): Tweet<ObjectId>? = this.tweets.find(Filters.eq(TWEET_ID, tweetId)).first()
 
+    fun findUserTweets(userId: Long): MutableList<Long> = this.userTweets.find(Filters.eq(USER_ID, userId)).first()!!.tweets
+	
     fun findReplies(tweetId: Long): TweetReplies<ObjectId>? =
         this.tweetReplies.find(Filters.eq(TWEET_ID, tweetId)).first()
 
@@ -527,6 +529,13 @@ class MongoDBStorage : AutoCloseable, Closeable {
         this.userTweets.insertOne(UserTweets(null, userId, tweets.toMutableList()))
     }
 
+	fun updateUserTweets(userId: Long, tweets: List<Long>){
+		this.userTweets.updateOne(
+                Filters.eq(USER_ID, userId),
+                Updates.addEachToSet("tweets", tweets)
+            )
+	}
+	
     fun storeTweetReplies(tweetId: Long, replies: List<Long>) {
         this.tweetReplies.insertOne(TweetReplies(null, tweetId, replies.toMutableList()))
     }

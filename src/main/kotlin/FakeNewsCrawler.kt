@@ -83,7 +83,7 @@ fun main(args: Array<String>) {
 			val userRelations = Option(
 					"ur",
 					"user relations",
-					false,
+					true,
 					"downloads the followee/follower relations of the already downloaded users. By default only downloads for users who wrote the core tweets. With -all downloads for every user in the database"
 					)
 			groups.addOption(userRelations)
@@ -91,7 +91,7 @@ fun main(args: Array<String>) {
 			val userTweets = Option(
 					"ut",
 					"user tweets",
-					false,
+					true,
 					"downloads the tweets of the already downloaded users. By default only downloads for users who wrote the core tweets. With -all downloads for every user in the database"
 					)
 			groups.addOption(userTweets)
@@ -233,7 +233,8 @@ fun main(args: Array<String>) {
 			val parser: CommandLineParser = DefaultParser()
 			try { // parse the command line arguments
 				val line = parser.parse(options, args) //TODO
-
+//				val args1 = arrayOf<String>("-t","C:/Users/Anto/Desktop/test.txt","-quotes","-conf","covid-fake-settings")
+//				val line = parser.parse(options, args1) //TODO 
 
 						configure(line.getOptionValue("conf", "settings.properties")!!)
 						when {
@@ -256,8 +257,8 @@ fun main(args: Array<String>) {
 //					line.hasOption("tquotes") -> downloadQuotes()
 					line.hasOption("u") -> downloadUsers()
 					line.hasOption("ua") -> downloadUsersFull(line.getOptionValue("ua"))
-					line.hasOption("ur") -> downloadUsersTweetsRelations(line.hasOption("all"),false,true,true)
-					line.hasOption("ut") -> downloadUsersTweetsRelations(line.hasOption("all"),true,false,false)
+					line.hasOption("ur") -> downloadUsersTweetsRelations(line.getOptionValue("ur"),line.hasOption("all"),false,true,true) // TODO: Se podría cambiar a que acepte un archivo y baje lo que corresponda de los ids del archivo
+					line.hasOption("ut") -> downloadUsersTweetsRelations(line.getOptionValue("ut"),line.hasOption("all"),true,false,false)
 				}
 				//								}else{
 				//									//TODO: Config the full scrapper
@@ -426,14 +427,26 @@ fun downloadUsers() {
 	storage.close()
 }
 
-fun downloadUsersTweetsRelations(all : Boolean = false,tweets: Boolean, followees: Boolean, followers: Boolean) { //for each user in users that it is not on followees/followers
+fun downloadUsersTweetsRelations(filename : String ?, all : Boolean = false,tweets: Boolean, followees: Boolean, followers: Boolean) { //for each user in users that it is not on followees/followers
 
 	LOGGER.info("Initializing DB")
 	val storage = MongoDBStorage()
 	val tweetCrawler = TwitterCrawler(storage)
 
-	if(all)
-		tweetCrawler.usersCrawl(storage.findUsers().filter{it > 0}.toLongArray(), tweets, followees, followers)
+	if(filename != null){
+		val downloadUsers = mutableSetOf<Long>()
+	
+	val file = File(filename)
+	file.readLines().map { it.trim() }.filter { it.isNotEmpty() }.forEach {
+			
+		downloadUsers.add(it.toLong())
+	}
+		tweetCrawler.usersCrawl(downloadUsers.toLongArray(), tweets, followees, followers)
+	}
+		
+	else
+		if(all)
+			tweetCrawler.usersCrawl(storage.findUsers().filter{it > 0}.toLongArray(), tweets, followees, followers)
 		else //get tweets for queries, get users for those queries, call usersCrawl
 			tweetCrawler.usersCrawl(storage.findAllQueryIds().asSequence().mapNotNull{it -> storage.findTweet(it)?.userId}.filter{it > 0}.toList().toLongArray(), tweets, followees, followers)
 
@@ -466,7 +479,7 @@ fun downloadUsersFull(filename : String?) {
 	}
 					
 	val tweetCrawler = TwitterCrawler(storage)	
-	tweetCrawler.usersCrawl(downloadUsers)
+	tweetCrawler.usersScreennameCrawl(downloadUsers)
 	downloadUsers.mapNotNull { it -> storage.findUser(it) }.forEach{u -> userIds.add(u.userId)}
 		
 	if(userIds.size == 0)
@@ -526,7 +539,7 @@ fun trackRealTime(recursive: Boolean) {
 							}
 						}
 						//we need to download users by screnname as they were not included in the database --> TODO
-						tweetCrawler.usersCrawl(downloadUsers)
+						tweetCrawler.usersScreennameCrawl(downloadUsers)
 						downloadUsers.forEach {
 							val u = storage.findUser(it)
 									if (u != null)

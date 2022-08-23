@@ -135,7 +135,8 @@ class TwitterStreamer(val storage: MongoDBStorage) {
                 override fun onScrubGeo(userId: Long, upToStatusId: Long) {}
 
                 override fun onException(ex: Exception) {
-                    LOGGER.error(ex.getLocalizedMessage())
+                    LOGGER.error("Error with streamer! ${ex.getLocalizedMessage()}")
+					nextTwitterConnection(null)	
                 }
 
                 override fun onBlock(source: User, blockedUser: User) {}
@@ -305,7 +306,7 @@ class TwitterStreamer(val storage: MongoDBStorage) {
                     }
                     else -> {
                         LOGGER.error("Unextpected error in twitter ", e)
-                        nextTwitterConnection(null)
+						nextTwitterConnection(null)
                     }
                 }
                 false //A Re-try is needed
