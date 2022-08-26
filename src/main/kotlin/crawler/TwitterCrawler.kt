@@ -381,7 +381,7 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 					}
 				}
 	}
-	
+
 	fun usersScreennameCrawl(screennames : MutableSet<String>){
 		LOGGER.info("Downloading user screename list")
 		screennames.filter {
@@ -394,7 +394,7 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 			}
 		}
 	}
-	
+
 	// We could replace the previous method for a unified version of it changing parameter type
 	fun usersCrawl(ids: LongArray, tweets: Boolean=true, followers: Boolean=true, followees: Boolean=true) {
 		LOGGER.info("Downloading user list")
@@ -409,15 +409,16 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 				}
 			}
 		}
-//		for those users that already exist, we update the tweet list, we do it first, to avoid processing twice all new users
+		//		for those users that already exist, we update the tweet list, we do it first, to avoid processing twice all new users
 		ids.filter{this.storage.userTweetsPresent(it)}.forEach { updateUsersTweets(it) }
-//		for new users, we download all the required information
+		//		for new users, we download all the required information
 		ids.filter{this.storage.findUser(it) != null}.forEach { userCrawl(it, tweets, followers, followees) }
-		 
-	}
-	
-	fun updateUsersTweets(userId: Long){ 
 		
+		LOGGER.info("Finished with user list")
+	}
+
+	fun updateUsersTweets(userId: Long){ 
+
 		LOGGER.info("Updating tweets for User {}", userId)
 		var tweets = mutableListOf<Status>()
 		retryTwitterDownloadWrapper {
@@ -433,18 +434,20 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 					page.page += 1
 			}
 		}
-		
+
 		val oldTweets = this.storage.findUserTweets(userId).toSet()
-		tweets = tweets.filter{t -> !oldTweets.contains(t.id)}.toMutableList()
+		tweets = tweets.filter{it.getUser() != null && it.getUser().getId() != -1L}
+				        .filter{t -> !oldTweets.contains(t.id)}.toMutableList()
+
 		LOGGER.info("Got new tweets for User {} {}", userId,tweets.size)
 		if (tweets.size > 0){
 			tweets.forEach { this.storeTweet(it) }
 			this.storage.updateUserTweets(userId, tweets.map { it.id })
 		}
 		tweets.map{t -> t.id}.chunked(100).forEach{tweetReplyDownload(it)}	
-		
+
 		oldTweets.chunked(100).forEach{tweetReplyDownload(it)}
-		
+
 	}
 
 	fun repairUsers(){
@@ -491,7 +494,7 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 			LOGGER.info("Downloading tweets for User {}", userId)
 			retryTwitterDownloadWrapper {
 				LOGGER.debug("Downloading pages...")
-				@Suppress("NAME_SHADOWING") val tweets = mutableListOf<Status>()
+				@Suppress("NAME_SHADOWING") var tweets = mutableListOf<Status>()
 				val page = Paging(1)
 				while (true) {
 					LOGGER.debug("Page: {} UserId: {}", page, userId)
@@ -501,7 +504,10 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 						break
 						page.page += 1
 				}
-				tweets.forEach { this.storeTweet(it) } 
+
+				tweets = tweets.filter{it.getUser() != null && it.getUser().getId() != -1L}.toMutableList()
+				tweets.forEach { this.storeTweet(it) }
+
 				this.storage.storeUserTweets(userId, tweets.map { it.id })
 				if(replies)
 					tweets.map{t -> t.id}.chunked(100).forEach{tweetReplyDownload(it)}	
@@ -638,7 +644,7 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 
 							var replies = getScrapedReplies(username,tweet.tweetId.toString())
 							replies.remove(-404L)
-					
+
 							if(replies.remove(-1L)) // if there was an error or there were more replies than those we could get
 								replies = getReplies(username,tweet.tweetId.toString(), driver)
 
@@ -658,50 +664,54 @@ class TwitterCrawler(val storage: MongoDBStorage): AutoCloseable {
 
 							retryTwitterDownloadWrapper { twitterCrawl(newIds) }
 				if(recursive) tweetReplyDownload(newIds)
+		
+		if (this.driver != null) {
+			this.close()
+		}
 	}
 
 	private fun tweetQuoteDownload(tweetIds : List<Long>){
 
 		val newIds = ArrayList<Long>()
-		
-		tweetIds.asSequence().chunked(7)
+
+				tweetIds.asSequence().chunked(7)
 				.forEach{ tids ->
 
-					val	tt = StringBuilder()
-					tids.forEach{tt.append(" OR url:${it}")}
+				val	tt = StringBuilder()
+				tids.forEach{tt.append(" OR url:${it}")}
 
-					val quotes = getScrappedSearch(tt.substring(3))
-		////			
-					tids.forEach{it -> quotes.remove(it)}
+				val quotes = getScrappedSearch(tt.substring(3))
+						////			
+						tids.forEach{it -> quotes.remove(it)}
 
-					LOGGER.info("Obtained quotes {} {}", tids, quotes)
+				LOGGER.info("Obtained quotes {} {}", tids, quotes)
 
-					newIds.addAll(quotes)
+				newIds.addAll(quotes)
 
-					if(newIds.size > 99){ //for every 100 tweets we found, we download them
-						retryTwitterDownloadWrapper { twitterCrawl(newIds) }
-							
-							val map = newIds.mapNotNull{i -> storage.findTweet(i)}
-						.groupBy{t -> t.quotedStatusId}
-						.mapValues{qq -> qq.value.map{tt -> tt.tweetId}}
-		
-		map.forEach{e -> storage.storeTweetQuotes(e.key,e.value)}
-						
-						newIds.clear()
-					}
+				if(newIds.size > 99){ //for every 100 tweets we found, we download them
+					retryTwitterDownloadWrapper { twitterCrawl(newIds) }
+
+					val map = newIds.mapNotNull{i -> storage.findTweet(i)}
+					.groupBy{t -> t.quotedStatusId}
+					.mapValues{qq -> qq.value.map{tt -> tt.tweetId}}
+
+					map.forEach{e -> storage.storeTweetQuotes(e.key,e.value)}
+
+					newIds.clear()
 				}
-		
-				if (newIds.isEmpty())
-					return
-		
-				retryTwitterDownloadWrapper { twitterCrawl(newIds) }
+		}
+
+		if (newIds.isEmpty())
+			return
+
+					retryTwitterDownloadWrapper { twitterCrawl(newIds) }
 
 		val map = newIds.mapNotNull{i -> storage.findTweet(i)}
-						.groupBy{t -> t.quotedStatusId}
-						.mapValues{qq -> qq.value.map{tt -> tt.tweetId}}
-		
+		.groupBy{t -> t.quotedStatusId}
+		.mapValues{qq -> qq.value.map{tt -> tt.tweetId}}
+
 		map.forEach{e -> storage.storeTweetQuotes(e.key,e.value)}
-			
+
 	}
 
 	private fun twitterCrawl(tweetIds : List<Long>){
